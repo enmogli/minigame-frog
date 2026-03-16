@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>青蛙過街 - 動態隨機關卡版</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            touch-action: none;
+            background-color: #111827;
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
+        canvas {
+            width: 100%;
+            max-width: 400px;
+            aspect-ratio: 400 / 480;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            border-radius: 8px;
+            background-color: #1f2937;
+        }
+        .d-pad-btn {
+            background-color: rgba(255, 255, 255, 0.15);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 12px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+            font-weight: bold;
+            user-select: none;
+            transition: background-color 0.1s;
+        }
+        .d-pad-btn:active {
+            background-color: rgba(255, 255, 255, 0.4);
+        }
+        @keyframes fadeUpOut {
+            0% { opacity: 0; transform: translate(-50%, -30%) scale(0.8); }
+            20% { opacity: 1; transform: translate(-50%, -50%) scale(1.2); }
+            80% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+            100% { opacity: 0; transform: translate(-50%, -70%) scale(0.9); }
+        }
+        .level-up-anim {
+            animation: fadeUpOut 1.8s ease-in-out forwards;
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0) translateY(0); }
+            20% { transform: translate(-8px, 6px); }
+            40% { transform: translate(8px, -6px); }
+            60% { transform: translate(-8px, -6px); }
+            80% { transform: translate(8px, 6px); }
+        }
+        .shake-anim {
+            animation: shake 0.3s cubic-bezier(.36,.07,.19,.97) both;
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col items-center justify-center">
+
+    <div class="relative flex flex-col items-center w-full px-4">
+        <!-- 頂部資訊列 -->
+        <div class="w-full flex justify-between items-center mb-2 max-w-[400px]">
+            <div class="text-lg font-bold text-green-400">分數: <span id="score">0</span></div>
+            <div class="text-xl font-extrabold text-blue-400">關卡: <span id="level">1</span></div>
+            <div class="text-lg font-bold text-red-400">生命: <span id="lives">3</span></div>
+        </div>
+
+        <!-- 遊戲畫布與覆蓋層 -->
+        <div class="relative w-full max-w-[400px] flex justify-center">
+            <canvas id="gameCanvas"></canvas>
+            
+            <div id="levelUpMsg" class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center opacity-0 pointer-events-none z-20" style="text-shadow: 3px 3px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;">
+                <div class="text-5xl font-black text-yellow-300 mb-2">下一關!</div>
+                <div class="text-xl font-bold text-white">車流重新配置中...</div>
+            </div>
+            
+            <div id="overlay" class="absolute inset-0 bg-black/85 flex flex-col items-center justify-center rounded-lg z-30 transition-opacity duration-300">
+                <h1 id="title" class="text-4xl font-extrabold text-green-500 mb-2 tracking-wider shadow-sm">青蛙過街</h1>
+                <div id="message" class="text-gray-300 mb-6 text-sm text-center px-6 leading-relaxed bg-gray-900/50 p-4 rounded-xl border border-gray-700">
+                    <span class="text-yellow-400 text-base font-bold">過關後車道會隨機變化！</span><br>
+                    🏎️ <span class="text-red-400">跑車極快</span> (Lv.3 出現)<br>
+                    🚛 <span class="text-blue-400">大卡車很長</span> (Lv.2 出現)<br>
+                    關卡越高，車輛越密集且越快！
+                </div>
+                <button id="startBtn" class="px-8 py-3 bg-green-500 hover:bg-green-600 text-white rounded-full font-bold text-xl transition transform hover:scale-105 shadow-[0_0_15px_rgba(34,197,94,0.5)]">
+                    開始遊戲
+                </button>
+            </div>
+        </div>
+
+        <!-- 音樂控制 -->
+        <div class="w-full flex justify-end mt-2 max-w-[400px]">
+            <button id="musicToggle" class="text-sm text-gray-400 hover:text-white px-3 py-1.5 rounded-full border border-gray-600 bg-gray-800 transition">
+                🎵 音樂: 關
+            </button>
+        </div>
+
+        <!-- 手機觸控方向鍵 -->
+        <div class="mt-4 flex flex-col gap-3 w-40 md:hidden">
+            <button class="d-pad-btn py-4 shadow-lg active:translate-y-1" id="btn-up">⬆️ 前進</button>
+            <button class="d-pad-btn py-4 shadow-lg active:translate-y-1" id="btn-down">⬇️ 後退</button>
+        </div>
+    </div>
+
+<script>
+/**
+ * 遊戲設定與 Canvas 初始化
+ */
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+const LOGICAL_WIDTH = 400;
+const LOGICAL_HEIGHT = 480;
+const TILE_SIZE = 40;
+const COLS = 10;
+const ROWS = 12;
+
+function initCanvas() {
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = LOGICAL_WIDTH * dpr;
+    canvas.height = LOGICAL_HEIGHT * dpr;
+    ctx.scale(dpr, dpr);
+}
+initCanvas();
+window.addEventListener('resize', initCanvas);
+
+let score = 0;
+let lives = 3;
+let level = 1;
+let isPlaying = false;
+let animationId;
+let lastTime = 0;
+
+const scoreEl = document.getElementById('score');
+const livesEl = document.getElementById('lives');
+const levelEl = document.getElementById('level');
+const overlay = document.getElementById('overlay');
+const titleEl = document.getElementById('title');
+const messageEl = document.getElementById('message');
+const startBtn = document.getElementById('startBtn');
+const musicToggleBtn = document.getElementById('musicToggle');
+const levelUpMsg = document.getElementById('levelUpMsg');
+
+/**
+ * 音效系統
+ */
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+let isMusicOn = false;
+let musicInterval = null;
+let currentNote = 0;
+
+const melody = [261.63, 329.63, 392.00, 523.25, 0, 392.00, 329.63, 261.63, 0];
+
+function playTone(freq, type, duration, vol = 0.1) {
+    if (freq === 0 || (!isMusicOn && type === 'square')) return;
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+    
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + duration);
+}
+
+const sfx = {
+    jump: () => {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(700, audioCtx.currentTime + 0.15);
+        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.15);
+    },
+    crash: () => {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(120, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(20, audioCtx.currentTime + 0.5); 
+        gain.gain.setValueAtTime(0.6, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.5);
+    },
+    levelUp: () => {
+        playTone(440, 'sine', 0.1, 0.2);
+        setTimeout(() => playTone(554, 'sine', 0.1, 0.2), 100);
+        setTimeout(() => playTone(659, 'sine', 0.1, 0.2), 200);
+        setTimeout(() => playTone(880, 'sine', 0.3, 0.2), 300);
+    }
+};
+
+function toggleMusic() {
+    isMusicOn = !isMusicOn;
+    musicToggleBtn.innerText = isMusicOn ? "🎵 音樂: 開" : "🎵 音樂: 關";
+    musicToggleBtn.className = isMusicOn 
+        ? "text-sm text-white px-3 py-1.5 rounded-full border border-green-500 bg-green-900 transition shadow-[0_0_10px_rgba(34,197,94,0.4)]"
+        : "text-sm text-gray-400 hover:text-white px-3 py-1.5 rounded-full border border-gray-600 bg-gray-800 transition";
+    
+    if (isMusicOn) {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        musicInterval = setInterval(() => {
+            playTone(melody[currentNote], 'square', 0.1, 0.05);
+            currentNote = (currentNote + 1) % melody.length;
+        }, 200);
+    } else {
+        clearInterval(musicInterval);
+    }
+}
+musicToggleBtn.addEventListener('click', toggleMusic);
+
+/**
+ * 遊戲動態難度生成器
+ */
+function generateLaneConfig(currentLevel) {
+    const roadRows = [2, 3, 4, 6, 7, 8, 9, 10]; // 扣除溪邊、草地與人行島的行駛排數
+    const config = [];
+    
+    // 難度參數 (最多疊加到 15，避免遊戲後期變成不可能的任務)
+    const diffScale = Math.min(currentLevel, 15);
+
+    roadRows.forEach(row => {
+        // 每關方向隨機重配
+        const dir = Math.random() > 0.5 ? 1 : -1;
+        
+        let type, speed, count, spacing, widthMult = 1, isFast = false;
+        const rand = Math.random();
+        
+        // 隨機決定車道類型 (根據關卡解鎖與機率)
+        if (currentLevel >= 3 && rand < 0.15 + (diffScale * 0.015)) {
+            // 跑車車道 (速度快，數量少)
+            type = '🏎️';
+            isFast = true;
+            speed = 3.5 + Math.random() * 1.5 + (diffScale * 0.15); // 最快可達 7.0 左右
+            count = 1 + Math.floor(Math.random() * 2);
+            spacing = 400 - (diffScale * 8); 
+        } else if (currentLevel >= 2 && rand < 0.35 + (diffScale * 0.01)) {
+            // 大卡車車道 (速度慢，車身長)
+            type = Math.random() > 0.5 ? '🚚' : '🚛';
+            widthMult = 2;
+            speed = 0.8 + Math.random() * 0.6 + (diffScale * 0.08);
+            count = 2 + Math.floor(Math.random() * 2); 
+            spacing = 280 - (diffScale * 10);
+        } else if (rand < 0.5) {
+            // 牽引車 (速度極慢當障礙)
+            type = '🚜';
+            speed = 0.6 + Math.random() * 0.4 + (diffScale * 0.05);
+            count = 2 + Math.floor(Math.random() * 2);
+            spacing = 220 - (diffScale * 5);
+        } else {
+            // 一般房車
+            const cars = ['🚗', '🚙', '🚕', '🚓'];
+            type = cars[Math.floor(Math.random() * cars.length)];
+            speed = 1.2 + Math.random() * 1.0 + (diffScale * 0.1);
+            count = 2 + Math.floor(Math.random() * 2) + Math.floor(diffScale / 4); // 數量隨關卡增加
+            spacing = 180 - (diffScale * 6);
+        }
+
+        // 確保間隔不會太小導致車子重疊，保留青蛙的生存空間
+        const minSpacing = (widthMult * 40) + 70; 
+        if (spacing < minSpacing) spacing = minSpacing;
+
+        config.push({
+            row: row,
+            speed: speed,
+            type: type,
+            dir: dir,
+            count: count,
+            spacing: spacing,
+            widthMult: widthMult,
+            isFast: isFast
+        });
+    });
+
+    return config;
+}
+
+function initLanes(laneConfigData) {
+    vehicles = [];
+    laneConfigData.forEach(config => {
+        const y = config.row * TILE_SIZE;
+        for (let i = 0; i < config.count; i++) {
+            const gap = i * config.spacing;
+            vehicles.push(new Vehicle(y, config.speed, config.type, config.dir, gap, config.widthMult, config.isFast));
+        }
+    });
+}
+
+/**
+ * 遊戲物件
+ */
+class Frog {
+    constructor() {
+        this.reset();
+        this.size = TILE_SIZE - 12;
+        this.jumpDuration = 200;
+        this.jumpHeightMax = 25;
+        this.deadX = 0;
+        this.deadY = 0;
+    }
+
+    reset() {
+        this.x = Math.floor(COLS / 2) * TILE_SIZE; 
+        this.y = (ROWS - 1) * TILE_SIZE;
+        this.isJumping = false;
+        this.jumpProgress = 0;
+        this.isDead = false;
+    }
+
+    move(dy) {
+        if (!isPlaying || this.isJumping || this.isDead) return;
+        
+        const newY = this.y + dy * TILE_SIZE;
+        if (newY >= 0 && newY < LOGICAL_HEIGHT) {
+            this.isJumping = true;
+            this.jumpProgress = 0;
+            this.startY = this.y;
+            this.targetY = newY;
+            sfx.jump();
+        }
+    }
+
+    update(dt) {
+        if (this.isDead) return;
+
+        if (this.isJumping) {
+            this.jumpProgress += dt / this.jumpDuration;
+            if (this.jumpProgress >= 1) {
+                this.isJumping = false;
+                this.y = this.targetY;
+                this.jumpProgress = 0;
+                
+                if (this.y === 0 && !this.isDead) {
+                    handleLevelUp();
+                }
+            }
+        }
+    }
+
+    draw() {
+        if (this.isDead) {
+            const dx = this.deadX;
+            const dy = this.deadY;
+
+            ctx.fillStyle = '#991b1b';
+            ctx.beginPath();
+            ctx.ellipse(dx + TILE_SIZE / 2, dy + TILE_SIZE / 2 + 5, 25, 12, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(dx + TILE_SIZE / 2 - 8, dy + TILE_SIZE / 2, 12, 16, Math.PI/4, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#16a34a'; 
+            ctx.beginPath();
+            ctx.ellipse(dx + TILE_SIZE / 2, dy + TILE_SIZE / 2 + 5, 20, 8, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.strokeStyle = '#15803d'; 
+            ctx.lineWidth = 4;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(dx + 12, dy + TILE_SIZE / 2 + 2); ctx.lineTo(dx + 2, dy + TILE_SIZE / 2 - 4);
+            ctx.moveTo(dx + 12, dy + TILE_SIZE / 2 + 8); ctx.lineTo(dx + 2, dy + TILE_SIZE / 2 + 16);
+            ctx.moveTo(dx + TILE_SIZE - 12, dy + TILE_SIZE / 2 + 2); ctx.lineTo(dx + TILE_SIZE - 2, dy + TILE_SIZE / 2 - 4);
+            ctx.moveTo(dx + TILE_SIZE - 12, dy + TILE_SIZE / 2 + 8); ctx.lineTo(dx + TILE_SIZE - 2, dy + TILE_SIZE / 2 + 16);
+            ctx.stroke();
+
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            let ex1 = dx + TILE_SIZE / 2 - 6; let ey = dy + TILE_SIZE / 2 + 3;
+            ctx.moveTo(ex1 - 3, ey - 3); ctx.lineTo(ex1 + 3, ey + 3);
+            ctx.moveTo(ex1 + 3, ey - 3); ctx.lineTo(ex1 - 3, ey + 3);
+
+            let ex2 = dx + TILE_SIZE / 2 + 6;
+            ctx.moveTo(ex2 - 3, ey - 3); ctx.lineTo(ex2 + 3, ey + 3);
+            ctx.moveTo(ex2 + 3, ey - 3); ctx.lineTo(ex2 - 3, ey + 3);
+            ctx.stroke();
+
+            return; 
+        }
+
+        let renderY = this.y;
+        let zOffset = 0;
+
+        if (this.isJumping) {
+            renderY = this.startY + (this.targetY - this.startY) * this.jumpProgress;
+            zOffset = Math.sin(this.jumpProgress * Math.PI) * this.jumpHeightMax;
+        }
+
+        ctx.font = '30px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        if (this.isJumping) {
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            const shadowScale = 1 - (zOffset / this.jumpHeightMax) * 0.5;
+            ctx.beginPath();
+            ctx.ellipse(this.x + TILE_SIZE / 2, renderY + TILE_SIZE / 2 + 10, 12 * shadowScale, 6 * shadowScale, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        ctx.fillText('🐸', this.x + TILE_SIZE / 2, renderY + TILE_SIZE / 2 - zOffset);
+    }
+    
+    getHitbox() {
+        const currentY = this.isJumping ? this.startY + (this.targetY - this.startY) * this.jumpProgress : this.y;
+        return { x: this.x, y: currentY, size: this.size };
+    }
+}
+
+class Vehicle {
+    constructor(y, speed, type, direction, gap, widthMult, isFast) {
+        this.y = y;
+        this.speed = speed; // 動態難度已經計算好，直接使用
+        this.type = type;
+        this.direction = direction;
+        this.widthMult = widthMult; 
+        this.width = TILE_SIZE * widthMult;
+        this.isFast = isFast; 
+        this.x = direction === 1 ? -this.width - gap : LOGICAL_WIDTH + gap;
+    }
+
+    update() {
+        this.x += this.speed * this.direction;
+        
+        if (this.direction === 1 && this.x > LOGICAL_WIDTH + 50) {
+            this.x = -this.width - 50;
+        } else if (this.direction === -1 && this.x < -this.width - 50) {
+            this.x = LOGICAL_WIDTH + 50;
+        }
+    }
+
+    draw() {
+        if (this.isFast) {
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            for (let i = 1; i <= 3; i++) {
+                let lineLength = 10 + Math.random() * 15;
+                let offsetX = this.direction === 1 ? -i * 20 : this.width + i * 20;
+                let offsetY = this.y + 10 + Math.random() * 20;
+                
+                ctx.moveTo(this.x + offsetX, offsetY);
+                ctx.lineTo(this.x + offsetX + (this.direction === 1 ? -lineLength : lineLength), offsetY);
+            }
+            ctx.stroke();
+        }
+
+        if (this.widthMult > 1) {
+            ctx.save();
+            const paddingX = 4, paddingY = 6;
+            const w = this.width - paddingX * 2, h = TILE_SIZE - paddingY * 2;
+            const startX = this.x + paddingX, startY = this.y + paddingY;
+            const cabWidth = 20, gap = 3, trailerWidth = w - cabWidth - gap;
+
+            const trailerColor = this.direction === 1 ? '#047857' : '#1d4ed8'; 
+            const cabColor = '#fbbf24', windowColor = '#93c5fd', wheelColor = '#1f2937'; 
+
+            let cabX, trailerX;
+            if (this.direction === 1) {
+                trailerX = startX; cabX = startX + trailerWidth + gap;
+            } else {
+                cabX = startX; trailerX = startX + cabWidth + gap;
+            }
+
+            ctx.fillStyle = trailerColor;
+            ctx.beginPath(); ctx.roundRect(trailerX, startY, trailerWidth, h, 3); ctx.fill();
+            
+            ctx.strokeStyle = 'rgba(0,0,0,0.2)'; ctx.lineWidth = 2; ctx.beginPath();
+            ctx.moveTo(trailerX + 8, startY + 4); ctx.lineTo(trailerX + 8, startY + h - 4);
+            ctx.moveTo(trailerX + trailerWidth / 2, startY + 4); ctx.lineTo(trailerX + trailerWidth / 2, startY + h - 4);
+            ctx.moveTo(trailerX + trailerWidth - 8, startY + 4); ctx.lineTo(trailerX + trailerWidth - 8, startY + h - 4);
+            ctx.stroke();
+
+            ctx.fillStyle = '#4b5563';
+            if (this.direction === 1) ctx.fillRect(trailerX + trailerWidth, startY + h - 6, gap, 4);
+            else ctx.fillRect(cabX + cabWidth, startY + h - 6, gap, 4);
+
+            ctx.fillStyle = cabColor;
+            ctx.beginPath(); ctx.roundRect(cabX, startY + 6, cabWidth, h - 6, 4); ctx.fill();
+
+            ctx.fillStyle = windowColor;
+            ctx.beginPath();
+            if (this.direction === 1) ctx.roundRect(cabX + cabWidth - 8, startY + 8, 6, h - 14, 2);
+            else ctx.roundRect(cabX + 2, startY + 8, 6, h - 14, 2);
+            ctx.fill();
+
+            ctx.fillStyle = wheelColor;
+            const wheelY = startY + h, wheelR = 4;
+            const drawWheel = (wx) => { ctx.beginPath(); ctx.arc(wx, wheelY, wheelR, 0, Math.PI * 2); ctx.fill(); };
+            if (this.direction === 1) {
+                drawWheel(trailerX + 10); drawWheel(trailerX + trailerWidth - 10); drawWheel(cabX + cabWidth - 6);
+            } else {
+                drawWheel(trailerX + trailerWidth - 10); drawWheel(trailerX + 10); drawWheel(cabX + 6);
+            }
+            ctx.restore();
+            return; 
+        }
+
+        ctx.save();
+        ctx.globalAlpha = 1.0; 
+        let cabCenterX = this.x + TILE_SIZE / 2;
+        ctx.translate(cabCenterX, this.y + TILE_SIZE / 2);
+        ctx.font = '26px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        if (this.direction === 1) ctx.scale(-1, 1);
+        ctx.fillText(this.type, 0, 0);
+        ctx.restore();
+    }
+}
+
+let frog;
+let vehicles = [];
+
+function checkCollisions() {
+    if (frog.isDead) return;
+
+    const hitboxMargin = 10;
+    const fBox = frog.getHitbox();
+    
+    for (let v of vehicles) {
+        if (
+            fBox.x + hitboxMargin < v.x + v.width - hitboxMargin &&
+            fBox.x + fBox.size - hitboxMargin > v.x + hitboxMargin &&
+            fBox.y + hitboxMargin < v.y + TILE_SIZE - hitboxMargin &&
+            fBox.y + fBox.size - hitboxMargin > v.y + hitboxMargin
+        ) {
+            handleCrash(fBox.x, fBox.y);
+            return;
+        }
+    }
+}
+
+function handleCrash(crashX, crashY) {
+    frog.isDead = true;
+    frog.deadX = crashX;
+    frog.deadY = crashY;
+    
+    sfx.crash();
+    canvas.classList.add('shake-anim');
+    setTimeout(() => canvas.classList.remove('shake-anim'), 300);
+
+    setTimeout(() => {
+        lives--;
+        updateUI();
+        if (lives <= 0) gameOver();
+        else frog.reset(); 
+    }, 1500); 
+}
+
+function handleLevelUp() {
+    sfx.levelUp();
+    level++;
+    score += 100 + (level * 20);
+    updateUI();
+    frog.reset();
+    
+    // 動態生成新的車流配置
+    const newLaneConfig = generateLaneConfig(level);
+    initLanes(newLaneConfig);
+    
+    // 顯示關卡動畫
+    levelUpMsg.querySelector('div:first-child').innerText = `第 ${level} 關!`;
+    levelUpMsg.classList.remove('level-up-anim');
+    void levelUpMsg.offsetWidth; 
+    levelUpMsg.classList.add('level-up-anim');
+}
+
+function updateUI() {
+    scoreEl.innerText = score;
+    livesEl.innerText = lives;
+    levelEl.innerText = level;
+}
+
+function gameOver() {
+    isPlaying = false;
+    titleEl.innerText = "遊戲結束";
+    titleEl.className = "text-5xl font-extrabold text-red-500 mb-4 tracking-wider shadow-sm";
+    messageEl.innerHTML = `抵達關卡: <span class="text-blue-400 font-bold">第 ${level} 關</span><br>最終分數: <span class="text-yellow-400 font-bold text-2xl">${score}</span><br><br>再來挑戰一次吧！`;
+    startBtn.innerText = "重新開始";
+    overlay.classList.remove('hidden');
+    overlay.classList.replace('opacity-0', 'opacity-100');
+}
+
+function startGame() {
+    score = 0;
+    lives = 3;
+    level = 1;
+    updateUI();
+    frog = new Frog();
+    
+    // 初始化第一關車流配置
+    const initialLaneConfig = generateLaneConfig(level);
+    initLanes(initialLaneConfig);
+    
+    isPlaying = true;
+    
+    overlay.classList.replace('opacity-100', 'opacity-0');
+    setTimeout(() => { if(isPlaying) overlay.classList.add('hidden'); }, 300);
+    
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    
+    cancelAnimationFrame(animationId);
+    lastTime = performance.now();
+    animationId = requestAnimationFrame(gameLoop);
+}
+
+function drawBackground() {
+    ctx.globalAlpha = 1.0; 
+    ctx.fillStyle = '#1e3a8a'; ctx.fillRect(0, 0, LOGICAL_WIDTH, TILE_SIZE);
+    
+    ctx.fillStyle = '#3b82f6'; 
+    for(let i=0; i<5; i++) {
+        ctx.fillRect(i*80 + (Date.now()/50)%40, 10, 20, 4);
+        ctx.fillRect(i*80 + 40 - (Date.now()/40)%40, 25, 15, 4);
+    }
+    
+    ctx.fillStyle = '#22c55e'; ctx.fillRect(0, TILE_SIZE, LOGICAL_WIDTH, TILE_SIZE);
+    ctx.fillStyle = '#374151'; ctx.fillRect(0, 2 * TILE_SIZE, LOGICAL_WIDTH, 3 * TILE_SIZE);
+    
+    ctx.fillStyle = '#22c55e'; ctx.fillRect(0, 5 * TILE_SIZE, LOGICAL_WIDTH, TILE_SIZE);
+    ctx.fillStyle = '#166534';
+    for(let i=0; i<10; i++) ctx.fillRect(i*40 + 15, 5 * TILE_SIZE + 15, 4, 8);
+    
+    ctx.fillStyle = '#374151'; ctx.fillRect(0, 6 * TILE_SIZE, LOGICAL_WIDTH, 5 * TILE_SIZE);
+    ctx.fillStyle = '#22c55e'; ctx.fillRect(0, 11 * TILE_SIZE, LOGICAL_WIDTH, TILE_SIZE);
+
+    ctx.strokeStyle = '#9ca3af'; ctx.lineWidth = 2; ctx.setLineDash([15, 20]); ctx.beginPath();
+    [3, 4, 7, 8, 9, 10].forEach(row => {
+        ctx.moveTo(0, row * TILE_SIZE); ctx.lineTo(LOGICAL_WIDTH, row * TILE_SIZE);
+    });
+    ctx.stroke(); ctx.setLineDash([]); 
+}
+
+function gameLoop(timestamp) {
+    if (!isPlaying) return;
+
+    let dt = timestamp - lastTime;
+    if (dt > 100) dt = 16;
+    lastTime = timestamp;
+
+    ctx.clearRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+    drawBackground();
+
+    vehicles.forEach(v => { v.update(); v.draw(); });
+
+    frog.update(dt);
+    frog.draw();
+
+    checkCollisions();
+    animationId = requestAnimationFrame(gameLoop);
+}
+
+window.addEventListener('keydown', (e) => {
+    if(["ArrowUp","ArrowDown"," "].indexOf(e.code) > -1) e.preventDefault();
+    if (!isPlaying) return;
+    switch(e.key) { case 'ArrowUp': frog.move(-1); break; case 'ArrowDown': frog.move(1); break; }
+});
+
+const btnUp = document.getElementById('btn-up');
+const btnDown = document.getElementById('btn-down');
+const handleJumpUp = (e) => { e.preventDefault(); frog.move(-1); };
+const handleJumpDown = (e) => { e.preventDefault(); frog.move(1); };
+
+btnUp.addEventListener('touchstart', handleJumpUp, {passive: false});
+btnUp.addEventListener('mousedown', handleJumpUp);
+btnDown.addEventListener('touchstart', handleJumpDown, {passive: false});
+btnDown.addEventListener('mousedown', handleJumpDown);
+
+startBtn.addEventListener('click', startGame);
+drawBackground();
+
+</script>
+</body>
+</html>
