@@ -1,696 +1,904 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>青蛙過街 - 動態隨機關卡版</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        body {
-            touch-action: none;
-            background-color: #111827;
-            color: white;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            overflow: hidden;
-        }
-        canvas {
-            width: 100%;
-            max-width: 400px;
-            aspect-ratio: 400 / 480;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
-            border-radius: 8px;
-            background-color: #1f2937;
-        }
-        .d-pad-btn {
-            background-color: rgba(255, 255, 255, 0.15);
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            border-radius: 12px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-size: 24px;
-            font-weight: bold;
-            user-select: none;
-            transition: background-color 0.1s;
-        }
-        .d-pad-btn:active {
-            background-color: rgba(255, 255, 255, 0.4);
-        }
-        @keyframes fadeUpOut {
-            0% { opacity: 0; transform: translate(-50%, -30%) scale(0.8); }
-            20% { opacity: 1; transform: translate(-50%, -50%) scale(1.2); }
-            80% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-            100% { opacity: 0; transform: translate(-50%, -70%) scale(0.9); }
-        }
-        .level-up-anim {
-            animation: fadeUpOut 1.8s ease-in-out forwards;
-        }
-        @keyframes shake {
-            0%, 100% { transform: translateX(0) translateY(0); }
-            20% { transform: translate(-8px, 6px); }
-            40% { transform: translate(8px, -6px); }
-            60% { transform: translate(-8px, -6px); }
-            80% { transform: translate(8px, 6px); }
-        }
-        .shake-anim {
-            animation: shake 0.3s cubic-bezier(.36,.07,.19,.97) both;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ROAD FROG — 越街狂蛙</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --neon-green:#00ff88; --neon-amber:#ffb800; --neon-red:#ff3355; --neon-blue:#00cfff;
+  --bg-deep:#05070f; --bg-card:#0d1225; --border-glow:rgba(0,255,136,0.18);
+  --text-primary:#e8f0ff; --text-secondary:#7a8ab0;
+  --font-ui:'Space Grotesk',sans-serif; --font-display:'Syne',sans-serif;
+  /* Cute menu palette */
+  --cute-bg0:#fff8f0; --cute-bg1:#ffecd9;
+  --cute-green:#2ec96b; --cute-green-dk:#1e9c52;
+  --cute-yellow:#ffc82e; --cute-pink:#ff7eb3;
+  --cute-blue:#5bc0f8; --cute-red:#ff5a70;
+  --cute-text:#3a2c1e; --cute-muted:#9a7f6a;
+  --cute-card:rgba(255,255,255,0.82);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:var(--bg-deep);font-family:var(--font-ui);
+  color:var(--text-primary);touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none}
+body{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  background-image:radial-gradient(ellipse 80% 50% at 50% 0%,rgba(0,255,136,0.06) 0%,transparent 70%);
+  transition:background .8s}
+body::after{content:'';position:fixed;inset:0;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.025) 2px,rgba(0,0,0,0.025) 4px);
+  pointer-events:none;z-index:1000}
+#game-wrapper{width:100%;max-width:420px;height:100%;max-height:800px;
+  display:flex;flex-direction:column;gap:10px;padding:12px}
+
+#hud{display:flex;align-items:center;justify-content:space-between;
+  background:var(--bg-card);border:1px solid var(--border-glow);border-radius:16px;padding:10px 14px}
+.hud-cell{display:flex;flex-direction:column;align-items:center;gap:1px}
+.hud-label{font-size:9px;font-weight:500;letter-spacing:.12em;text-transform:uppercase;color:var(--text-secondary)}
+.hud-value{font-family:var(--font-display);font-size:24px;font-weight:800;line-height:1;
+  color:var(--neon-green);text-shadow:0 0 20px rgba(0,255,136,.6)}
+.hud-value.pop{animation:hud-pop .25s ease-out}
+@keyframes hud-pop{0%{transform:scale(1)}50%{transform:scale(1.4);color:#fff}100%{transform:scale(1)}}
+
+#lives-dots{display:flex;gap:4px;align-items:center}
+.life-dot{width:9px;height:9px;border-radius:50%;background:var(--neon-red);
+  box-shadow:0 0 8px var(--neon-red);transition:all .4s}
+.life-dot.empty{background:rgba(255,51,85,.12);box-shadow:none;border:1px solid rgba(255,51,85,.3)}
+
+#time-badge{font-size:11px;font-weight:600;letter-spacing:.06em;padding:4px 10px;
+  border-radius:20px;border:1px solid;transition:all .6s;cursor:pointer;white-space:nowrap}
+#time-badge.day{background:rgba(255,210,60,.12);border-color:rgba(255,210,60,.45);color:#ffd04a}
+#time-badge.night{background:rgba(110,140,255,.1);border-color:rgba(110,140,255,.35);color:#8ba4ff}
+
+#sound-btn{background:transparent;border:1px solid rgba(255,255,255,.1);border-radius:10px;
+  color:var(--text-secondary);font-size:14px;cursor:pointer;padding:6px 8px;transition:all .2s;line-height:1}
+#sound-btn.active{border-color:var(--neon-green);color:var(--neon-green)}
+
+#canvas-container{flex:1;position:relative;border-radius:20px;overflow:hidden;
+  border:1px solid var(--border-glow);
+  box-shadow:0 0 0 1px rgba(0,255,136,.05),0 20px 60px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.05)}
+/* CRITICAL: canvas fills container via CSS only; actual pixels set in JS */
+canvas{display:block;width:100%;height:100%}
+
+/* ── CUTE OVERLAY ── */
+#overlay{
+  position:absolute;inset:0;
+  background:linear-gradient(160deg,#fff8f0 0%,#ffecd9 40%,#fff0f8 75%,#eef8ff 100%);
+  display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:18px;padding:28px;transition:opacity .35s;z-index:50;
+  overflow:hidden}
+#overlay.hidden{opacity:0;pointer-events:none}
+
+/* Floating bubbles decoration */
+#overlay::before,#overlay::after{
+  content:'🐸';position:absolute;font-size:80px;opacity:.07;pointer-events:none;
+  animation:float-deco 6s ease-in-out infinite}
+#overlay::before{top:-20px;left:-10px;animation-delay:0s}
+#overlay::after{bottom:-20px;right:-10px;animation-delay:-3s}
+@keyframes float-deco{0%,100%{transform:translateY(0) rotate(-8deg)}50%{transform:translateY(-12px) rotate(8deg)}}
+
+/* Cute polka dots pattern */
+.overlay-dots{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.overlay-dots span{position:absolute;border-radius:50%;opacity:.18;animation:pop-dot 3s ease-in-out infinite}
+
+#game-title{text-align:center;position:relative;z-index:1}
+#game-title .frog-icon{font-size:56px;display:block;margin-bottom:4px;
+  animation:bounce-frog 1.4s ease-in-out infinite}
+@keyframes bounce-frog{0%,100%{transform:translateY(0) scale(1)}45%{transform:translateY(-10px) scale(1.08)}55%{transform:translateY(-10px) scale(1.08)}}
+#game-title .line1{
+  display:block;font-family:var(--font-display);font-size:44px;font-weight:800;letter-spacing:-.01em;line-height:1;
+  color:var(--cute-green);
+  text-shadow:0 4px 0 var(--cute-green-dk),0 6px 12px rgba(46,201,107,.3)}
+#game-title .line2{
+  display:block;font-size:16px;font-weight:700;letter-spacing:.18em;color:var(--cute-muted);margin-top:6px}
+
+#overlay-info{
+  background:var(--cute-card);border:2px solid rgba(46,201,107,.25);border-radius:20px;
+  padding:16px 22px;font-size:13px;line-height:1.85;color:var(--cute-text);
+  text-align:center;width:100%;max-width:300px;
+  box-shadow:0 4px 20px rgba(0,0,0,.08),0 1px 0 rgba(255,255,255,.9) inset;
+  position:relative;z-index:1}
+#overlay-info strong{color:var(--cute-green);font-weight:700}
+#overlay-info .hint-tag{
+  display:inline-block;margin-top:10px;font-size:11px;color:var(--cute-muted);
+  background:rgba(0,0,0,.06);border-radius:20px;padding:3px 10px}
+
+#overlay-score-display{text-align:center;display:none;position:relative;z-index:1}
+#overlay-final-score{
+  font-family:var(--font-display);font-size:60px;font-weight:800;
+  color:var(--cute-green);display:block;line-height:1;
+  text-shadow:0 4px 0 var(--cute-green-dk),0 8px 20px rgba(46,201,107,.25)}
+#overlay-final-label{font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--cute-muted);margin-bottom:4px;display:block}
+#overlay-level-tag{
+  font-size:13px;font-weight:600;color:var(--cute-muted);margin-top:6px;display:block}
+
+/* GAME OVER specific */
+#overlay.gameover #game-title .line1{
+  color:var(--cute-red);
+  text-shadow:0 4px 0 #cc2233,0 6px 14px rgba(255,90,112,.3)}
+#overlay.gameover #game-title .frog-icon{animation:dead-spin 0.5s ease forwards}
+@keyframes dead-spin{0%{transform:rotate(0)}100%{transform:rotate(180deg) scale(.85)}}
+
+#start-btn{
+  background:var(--cute-green);color:#fff;border:none;border-radius:50px;
+  padding:15px 44px;font-family:var(--font-display);font-size:18px;font-weight:800;
+  letter-spacing:.04em;cursor:pointer;transition:all .15s;position:relative;z-index:1;
+  box-shadow:0 5px 0 var(--cute-green-dk),0 8px 24px rgba(46,201,107,.35)}
+#start-btn:hover{background:#34d975;transform:translateY(-2px);box-shadow:0 7px 0 var(--cute-green-dk),0 10px 28px rgba(46,201,107,.4)}
+#start-btn:active{transform:translateY(3px);box-shadow:0 2px 0 var(--cute-green-dk),0 4px 12px rgba(46,201,107,.3)}
+
+#any-key-hint{
+  font-size:12px;color:var(--cute-muted);position:relative;z-index:1;
+  animation:blink-hint 1.4s ease-in-out infinite}
+@keyframes blink-hint{0%,100%{opacity:.5}50%{opacity:1}}
+@keyframes pop-dot{0%,100%{transform:scale(1) translateY(0)}50%{transform:scale(1.3) translateY(-6px)}}
+
+#level-toast{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) scale(.8);
+  text-align:center;pointer-events:none;opacity:0;z-index:40}
+#level-toast.show{animation:toast-in 2s ease forwards}
+@keyframes toast-in{0%{opacity:0;transform:translate(-50%,-40%) scale(.7)}20%{opacity:1;transform:translate(-50%,-50%) scale(1.1)}70%{opacity:1;transform:translate(-50%,-50%) scale(1)}100%{opacity:0;transform:translate(-50%,-58%) scale(.95)}}
+.toast-num{font-family:var(--font-display);font-size:72px;font-weight:800;color:var(--neon-amber);
+  text-shadow:0 0 20px rgba(255,184,0,.9),0 0 60px rgba(255,184,0,.4),2px 2px 0 rgba(0,0,0,.5);line-height:1}
+.toast-sub{font-size:13px;font-weight:500;letter-spacing:.2em;text-transform:uppercase;
+  color:rgba(255,255,255,.7);text-shadow:1px 1px 4px rgba(0,0,0,.8);margin-top:4px}
+
+#flash{position:absolute;inset:0;pointer-events:none;border-radius:20px;opacity:0;z-index:30}
+#flash.red{background:rgba(255,51,85,.35);animation:flash-anim .4s ease}
+#flash.green{background:rgba(0,255,136,.2);animation:flash-anim .3s ease}
+@keyframes flash-anim{0%{opacity:1}100%{opacity:0}}
+@keyframes shake{0%,100%{transform:translate(0,0)}15%{transform:translate(-6px,4px)}30%{transform:translate(6px,-4px)}45%{transform:translate(-5px,-3px)}60%{transform:translate(4px,3px)}75%{transform:translate(-3px,2px)}}
+.shake{animation:shake .35s cubic-bezier(.36,.07,.19,.97) both}
+
+#progress-bar{position:absolute;left:0;right:0;top:0;height:3px;background:rgba(0,255,136,.1);z-index:20}
+#progress-fill{height:100%;background:linear-gradient(90deg,var(--neon-green),var(--neon-blue));
+  transition:width .2s ease;box-shadow:0 0 8px rgba(0,255,136,.6)}
+
+#controls{display:flex;gap:10px}
+.ctrl-btn{flex:1;height:68px;background:var(--bg-card);border:1px solid var(--border-glow);
+  border-radius:18px;display:flex;align-items:center;justify-content:center;gap:8px;
+  font-family:var(--font-ui);font-size:14px;font-weight:700;color:var(--text-secondary);
+  letter-spacing:.04em;cursor:pointer;transition:all .1s;position:relative;overflow:hidden}
+.ctrl-btn::before{content:'';position:absolute;inset:0;opacity:0;transition:opacity .1s}
+.ctrl-btn.up::before{background:radial-gradient(ellipse at center top,rgba(0,255,136,.15),transparent 70%)}
+.ctrl-btn.down::before{background:radial-gradient(ellipse at center bottom,rgba(0,207,255,.15),transparent 70%)}
+.ctrl-btn:active,.ctrl-btn.pressed{transform:scale(.96);border-color:var(--neon-green);color:var(--neon-green)}
+.ctrl-btn:active::before,.ctrl-btn.pressed::before{opacity:1}
+.ctrl-btn .arrow{font-size:20px;line-height:1}
+</style>
 </head>
-<body class="h-screen flex flex-col items-center justify-center">
-
-    <div class="relative flex flex-col items-center w-full px-4">
-        <!-- 頂部資訊列 -->
-        <div class="w-full flex justify-between items-center mb-2 max-w-[400px]">
-            <div class="text-lg font-bold text-green-400">分數: <span id="score">0</span></div>
-            <div class="text-xl font-extrabold text-blue-400">關卡: <span id="level">1</span></div>
-            <div class="text-lg font-bold text-red-400">生命: <span id="lives">3</span></div>
-        </div>
-
-        <!-- 遊戲畫布與覆蓋層 -->
-        <div class="relative w-full max-w-[400px] flex justify-center">
-            <canvas id="gameCanvas"></canvas>
-            
-            <div id="levelUpMsg" class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center opacity-0 pointer-events-none z-20" style="text-shadow: 3px 3px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;">
-                <div class="text-5xl font-black text-yellow-300 mb-2">下一關!</div>
-                <div class="text-xl font-bold text-white">車流重新配置中...</div>
-            </div>
-            
-            <div id="overlay" class="absolute inset-0 bg-black/85 flex flex-col items-center justify-center rounded-lg z-30 transition-opacity duration-300">
-                <h1 id="title" class="text-4xl font-extrabold text-green-500 mb-2 tracking-wider shadow-sm">青蛙過街</h1>
-                <div id="message" class="text-gray-300 mb-6 text-sm text-center px-6 leading-relaxed bg-gray-900/50 p-4 rounded-xl border border-gray-700">
-                    <span class="text-yellow-400 text-base font-bold">過關後車道會隨機變化！</span><br>
-                    🏎️ <span class="text-red-400">跑車極快</span> (Lv.3 出現)<br>
-                    🚛 <span class="text-blue-400">大卡車很長</span> (Lv.2 出現)<br>
-                    關卡越高，車輛越密集且越快！
-                </div>
-                <button id="startBtn" class="px-8 py-3 bg-green-500 hover:bg-green-600 text-white rounded-full font-bold text-xl transition transform hover:scale-105 shadow-[0_0_15px_rgba(34,197,94,0.5)]">
-                    開始遊戲
-                </button>
-            </div>
-        </div>
-
-        <!-- 音樂控制 -->
-        <div class="w-full flex justify-end mt-2 max-w-[400px]">
-            <button id="musicToggle" class="text-sm text-gray-400 hover:text-white px-3 py-1.5 rounded-full border border-gray-600 bg-gray-800 transition">
-                🎵 音樂: 關
-            </button>
-        </div>
-
-        <!-- 手機觸控方向鍵 -->
-        <div class="mt-4 flex flex-col gap-3 w-40 md:hidden">
-            <button class="d-pad-btn py-4 shadow-lg active:translate-y-1" id="btn-up">⬆️ 前進</button>
-            <button class="d-pad-btn py-4 shadow-lg active:translate-y-1" id="btn-down">⬇️ 後退</button>
-        </div>
+<body>
+<div id="game-wrapper">
+  <div id="hud">
+    <div class="hud-cell">
+      <span class="hud-label">Score</span>
+      <span class="hud-value" id="score-val">0</span>
     </div>
+    <div class="hud-cell">
+      <span class="hud-label">Level</span>
+      <span class="hud-value" id="level-val" style="color:var(--neon-amber);text-shadow:0 0 20px rgba(255,184,0,.6)">1</span>
+    </div>
+    <div class="hud-cell">
+      <span class="hud-label">Lives</span>
+      <div id="lives-dots"></div>
+    </div>
+    <span id="time-badge" class="night" title="點擊切換晝夜">🌙 夜晚</span>
+    <button id="sound-btn" title="Sound">♪</button>
+  </div>
+
+  <div id="canvas-container">
+    <div id="progress-bar"><div id="progress-fill" style="width:0%"></div></div>
+    <canvas id="game-canvas"></canvas>
+    <div id="flash"></div>
+    <div id="level-toast">
+      <div class="toast-num" id="toast-num">LVL 2</div>
+      <div class="toast-sub" id="toast-sub">Stage Clear</div>
+    </div>
+    <div id="overlay">
+      <div class="overlay-dots" id="overlay-dots"></div>
+      <div id="game-title">
+        <span class="frog-icon">🐸</span>
+        <span class="line1">ROAD FROG</span>
+        <span class="line2">越 街 狂 蛙</span>
+      </div>
+      <div id="overlay-info">
+        <strong>⬆ 前進</strong> 穿越車流 &nbsp;·&nbsp; <strong>⬇ 後退</strong> 躲避危機<br>
+        <span class="hint-tag">🌙 過關後晝夜自動切換</span>
+      </div>
+      <div id="overlay-score-display">
+        <span id="overlay-final-label">最終分數</span>
+        <span id="overlay-final-score">0</span>
+        <span id="overlay-level-tag"></span>
+      </div>
+      <button id="start-btn">🐸 開始遊戲</button>
+      <div id="any-key-hint" style="display:none">按任意鍵 / 點擊畫面繼續</div>
+    </div>
+  </div>
+
+  <div id="controls">
+    <button class="ctrl-btn up" id="btn-up"><span class="arrow">↑</span><span>前進</span></button>
+    <button class="ctrl-btn down" id="btn-down"><span class="arrow">↓</span><span>後退</span></button>
+  </div>
+</div>
 
 <script>
-/**
- * 遊戲設定與 Canvas 初始化
- */
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
+// ═══════════════════════════════════════════════════════════
+// CANVAS SETUP — SHARP ON ALL DISPLAYS
+// Physical px = LW × dpr. Transform = dpr only (no CSS scale).
+// ctx coords always in logical space 0..LW × 0..LH.
+// ═══════════════════════════════════════════════════════════
+const canvas = document.getElementById('game-canvas');
+const ctx    = canvas.getContext('2d');
+const LW = 400, LH = 520, TILE = 40, COLS = 10, ROWS = 13;
 
-const LOGICAL_WIDTH = 400;
-const LOGICAL_HEIGHT = 480;
-const TILE_SIZE = 40;
-const COLS = 10;
-const ROWS = 12;
-
-function initCanvas() {
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = LOGICAL_WIDTH * dpr;
-    canvas.height = LOGICAL_HEIGHT * dpr;
-    ctx.scale(dpr, dpr);
+function setupCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width  = LW * dpr;
+  canvas.height = LH * dpr;
+  // One clean reset + single dpr scale — no cumulative drift
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
-initCanvas();
-window.addEventListener('resize', initCanvas);
+setupCanvas();
+window.addEventListener('resize', () => { setupCanvas(); if (!isPlaying) drawBG(); });
 
-let score = 0;
-let lives = 3;
-let level = 1;
-let isPlaying = false;
-let animationId;
-let lastTime = 0;
-
-const scoreEl = document.getElementById('score');
-const livesEl = document.getElementById('lives');
-const levelEl = document.getElementById('level');
-const overlay = document.getElementById('overlay');
-const titleEl = document.getElementById('title');
-const messageEl = document.getElementById('message');
-const startBtn = document.getElementById('startBtn');
-const musicToggleBtn = document.getElementById('musicToggle');
-const levelUpMsg = document.getElementById('levelUpMsg');
-
-/**
- * 音效系統
- */
-const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-let isMusicOn = false;
-let musicInterval = null;
-let currentNote = 0;
-
-const melody = [261.63, 329.63, 392.00, 523.25, 0, 392.00, 329.63, 261.63, 0];
-
-function playTone(freq, type, duration, vol = 0.1) {
-    if (freq === 0 || (!isMusicOn && type === 'square')) return;
-    if (audioCtx.state === 'suspended') audioCtx.resume();
-    
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    
-    osc.type = type;
-    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-    gain.gain.setValueAtTime(vol, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
-    
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-    osc.start();
-    osc.stop(audioCtx.currentTime + duration);
-}
-
-const sfx = {
-    jump: () => {
-        if (audioCtx.state === 'suspended') audioCtx.resume();
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(300, audioCtx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(700, audioCtx.currentTime + 0.15);
-        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.15);
-    },
-    crash: () => {
-        if (audioCtx.state === 'suspended') audioCtx.resume();
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(120, audioCtx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(20, audioCtx.currentTime + 0.5); 
-        gain.gain.setValueAtTime(0.6, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.5);
-    },
-    levelUp: () => {
-        playTone(440, 'sine', 0.1, 0.2);
-        setTimeout(() => playTone(554, 'sine', 0.1, 0.2), 100);
-        setTimeout(() => playTone(659, 'sine', 0.1, 0.2), 200);
-        setTimeout(() => playTone(880, 'sine', 0.3, 0.2), 300);
-    }
+// ═══════════════════════════════════════════════════════════
+// DAY / NIGHT PALETTES
+// ═══════════════════════════════════════════════════════════
+const THEMES = {
+  night: {
+    sky0:'#05070f', sky1:'#0e1428',
+    sidewalk:'#1a1f3a', swMark:'#252c4a',
+    road:'#131520', roadAlt:'#0f1018',
+    median:'#1e2840', bush0:'#1a4428', bush1:'#1d5c32',
+    home:'#0d1225', lily:'#1a5c30', lilyS:'#22c55e',
+    edgeLine:'rgba(255,255,255,0.14)', dashLine:'rgba(255,210,0,0.38)',
+    poleOn:true,
+    truckBody:(d)=>d===1?'#065f46':'#1e3a8a', truckCab:'#d97706', truckWin:'#bfdbfe',
+    truckWheel:'#111',
+  },
+  day: {
+    sky0:'#4da8e8', sky1:'#82caf8',
+    sidewalk:'#c9c0a8', swMark:'#b6aa94',
+    road:'#58534a', roadAlt:'#504b43',
+    median:'#78ba48', bush0:'#3e7a20', bush1:'#52922e',
+    home:'#5ec45e', lily:'#2a7236', lilyS:'#4caf50',
+    edgeLine:'rgba(255,255,255,0.5)', dashLine:'rgba(255,255,255,0.55)',
+    poleOn:false,
+    truckBody:(d)=>d===1?'#1a6644':'#2560ba', truckCab:'#e08c10', truckWin:'#d4efff',
+    truckWheel:'#333',
+  }
 };
 
-function toggleMusic() {
-    isMusicOn = !isMusicOn;
-    musicToggleBtn.innerText = isMusicOn ? "🎵 音樂: 開" : "🎵 音樂: 關";
-    musicToggleBtn.className = isMusicOn 
-        ? "text-sm text-white px-3 py-1.5 rounded-full border border-green-500 bg-green-900 transition shadow-[0_0_10px_rgba(34,197,94,0.4)]"
-        : "text-sm text-gray-400 hover:text-white px-3 py-1.5 rounded-full border border-gray-600 bg-gray-800 transition";
-    
-    if (isMusicOn) {
-        if (audioCtx.state === 'suspended') audioCtx.resume();
-        musicInterval = setInterval(() => {
-            playTone(melody[currentNote], 'square', 0.1, 0.05);
-            currentNote = (currentNote + 1) % melody.length;
-        }, 200);
+let isDay = false;
+
+function T() { return isDay ? THEMES.day : THEMES.night; }
+
+function applyDayNightUI() {
+  const badge = document.getElementById('time-badge');
+  if (isDay) {
+    badge.textContent = '☀️ 白天'; badge.className = 'day';
+    document.body.style.background = '#1a2b3c';
+  } else {
+    badge.textContent = '🌙 夜晚'; badge.className = 'night';
+    document.body.style.background = '#05070f';
+  }
+}
+document.getElementById('time-badge').addEventListener('click', () => {
+  isDay = !isDay; applyDayNightUI(); if (!isPlaying) drawBG();
+});
+applyDayNightUI();
+
+// ═══════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════
+let score=0, lives=5, level=1;
+let isPlaying=false, rafId, lastTs=0, gameOverShown=false;
+let vehicles=[], frog, particles=[];
+let bgTime=0;
+
+const $=id=>document.getElementById(id);
+const scoreVal=$('score-val'), levelVal=$('level-val'), livesDots=$('lives-dots');
+const overlay=$('overlay'), startBtn=$('start-btn'), soundBtn=$('sound-btn');
+const flashEl=$('flash'), toast=$('level-toast'), toastNum=$('toast-num'), toastSub=$('toast-sub');
+const progressFill=$('progress-fill'), scoreDisp=$('overlay-score-display'), finalScore=$('overlay-final-score');
+
+// ═══════════════════════════════════════════════════════════
+// AUDIO
+// ═══════════════════════════════════════════════════════════
+let AC=null, isSoundOn=false, trafficTimer=null, rumble=null, noiseBuf=null;
+function getAC(){ if(!AC) AC=new(window.AudioContext||window.webkitAudioContext)(); return AC; }
+function getNoise(){
+  if(noiseBuf) return noiseBuf;
+  const ac=getAC(), sz=ac.sampleRate*3;
+  noiseBuf=ac.createBuffer(1,sz,ac.sampleRate);
+  const d=noiseBuf.getChannelData(0); for(let i=0;i<sz;i++) d[i]=Math.random()*2-1;
+  return noiseBuf;
+}
+function startAmbient(){
+  if(!isSoundOn) return; stopAmbient();
+  const ac=getAC(); if(ac.state==='suspended') ac.resume();
+  rumble=ac.createBufferSource(); rumble.buffer=getNoise(); rumble.loop=true;
+  const lp=ac.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=160;
+  const gn=ac.createGain(); gn.gain.value=.65;
+  rumble.connect(lp); lp.connect(gn); gn.connect(ac.destination); rumble.start();
+  trafficTimer=setInterval(()=>{ if(!isSoundOn) return; Math.random()<.45?swoosh():(Math.random()>.78?hornSfx():null); },1100);
+}
+function stopAmbient(){
+  try{if(rumble){rumble.stop();rumble.disconnect();}}catch(e){}
+  rumble=null; if(trafficTimer){clearInterval(trafficTimer);trafficTimer=null;}
+}
+function swoosh(){
+  const ac=getAC(), s=ac.createBufferSource(); s.buffer=getNoise();
+  const bp=ac.createBiquadFilter(); bp.type='bandpass'; bp.Q.value=1.8;
+  bp.frequency.setValueAtTime(1200,ac.currentTime); bp.frequency.exponentialRampToValueAtTime(130,ac.currentTime+1);
+  const g=ac.createGain(); g.gain.setValueAtTime(.01,ac.currentTime); g.gain.linearRampToValueAtTime(.35,ac.currentTime+.3); g.gain.linearRampToValueAtTime(.01,ac.currentTime+1);
+  s.connect(bp); bp.connect(g); g.connect(ac.destination); s.start(); s.stop(ac.currentTime+1);
+}
+function hornSfx(){
+  const ac=getAC(), o1=ac.createOscillator(), o2=ac.createOscillator(), g=ac.createGain();
+  o1.type=o2.type='sawtooth'; const f=280+Math.random()*240;
+  o1.frequency.value=f; o2.frequency.value=f*1.09;
+  g.gain.setValueAtTime(0,ac.currentTime); g.gain.linearRampToValueAtTime(.18,ac.currentTime+.05);
+  g.gain.setValueAtTime(.18,ac.currentTime+.18); g.gain.linearRampToValueAtTime(0,ac.currentTime+.28);
+  o1.connect(g); o2.connect(g); g.connect(ac.destination);
+  o1.start(); o2.start(); o1.stop(ac.currentTime+.3); o2.stop(ac.currentTime+.3);
+}
+const sfx={
+  jump(){
+    if(!isSoundOn) return; const ac=getAC(); if(ac.state==='suspended') ac.resume();
+    const o=ac.createOscillator(), g=ac.createGain(); o.type='square';
+    o.frequency.setValueAtTime(120,ac.currentTime); o.frequency.exponentialRampToValueAtTime(520,ac.currentTime+.1);
+    g.gain.setValueAtTime(.12,ac.currentTime); g.gain.exponentialRampToValueAtTime(.001,ac.currentTime+.1);
+    o.connect(g); g.connect(ac.destination); o.start(); o.stop(ac.currentTime+.1);
+  },
+  crash(){
+    if(!isSoundOn) return; const ac=getAC(); if(ac.state==='suspended') ac.resume();
+    const s=ac.createBufferSource(); s.buffer=getNoise();
+    const bp=ac.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=600; bp.Q.value=.5;
+    const g=ac.createGain(); g.gain.setValueAtTime(.9,ac.currentTime); g.gain.exponentialRampToValueAtTime(.001,ac.currentTime+.45);
+    s.connect(bp); bp.connect(g); g.connect(ac.destination); s.start(); s.stop(ac.currentTime+.45);
+    const o=ac.createOscillator(), g2=ac.createGain(); o.type='sine';
+    o.frequency.setValueAtTime(80,ac.currentTime); o.frequency.exponentialRampToValueAtTime(20,ac.currentTime+.3);
+    g2.gain.setValueAtTime(.5,ac.currentTime); g2.gain.exponentialRampToValueAtTime(.001,ac.currentTime+.3);
+    o.connect(g2); g2.connect(ac.destination); o.start(); o.stop(ac.currentTime+.3);
+  },
+  levelUp(){
+    if(!isSoundOn) return; const ac=getAC();
+    [[440,0],[554,.12],[659,.24],[880,.36]].forEach(([f,t])=>{
+      const o=ac.createOscillator(), g=ac.createGain(); o.type='sine'; o.frequency.value=f;
+      g.gain.setValueAtTime(.18,ac.currentTime+t); g.gain.exponentialRampToValueAtTime(.001,ac.currentTime+t+.25);
+      o.connect(g); g.connect(ac.destination); o.start(ac.currentTime+t); o.stop(ac.currentTime+t+.25);
+    });
+  }
+};
+function toggleSound(){
+  isSoundOn=!isSoundOn; soundBtn.textContent=isSoundOn?'♪':'♩'; soundBtn.classList.toggle('active',isSoundOn);
+  if(isSoundOn){ if(AC?.state==='suspended') AC.resume(); if(isPlaying) startAmbient(); }
+  else stopAmbient();
+}
+soundBtn.addEventListener('click',toggleSound);
+
+// ═══════════════════════════════════════════════════════════
+// LANES
+// ═══════════════════════════════════════════════════════════
+function generateLanes(lv){
+  const rows=[2,3,4,6,7,8,9,10], diff=Math.min(lv,8), out=[];
+  rows.forEach(row=>{
+    const dir=Math.random()>.5?1:-1, r=Math.random();
+    let type,speed,count,spacing,wm=1,fast=false;
+    if(lv>=5&&r<.08+diff*.01){
+      // 賽車要到第5關才出現，且更少
+      type='🏎️';fast=true;
+      speed=2.0+Math.random()*0.8+diff*.08;
+      count=1;spacing=420-diff*5;
+    } else if(lv>=3&&r<.25){
+      type=Math.random()>.5?'🚚':'🚛';wm=2;
+      speed=0.5+Math.random()*.4+diff*.04;
+      count=1+~~(Math.random()*2);spacing=320-diff*8;
+    } else if(r<.5){
+      type='🚜';
+      speed=0.4+Math.random()*.35+diff*.03;
+      count=1+~~(Math.random()*2);spacing=280-diff*5;
     } else {
-        clearInterval(musicInterval);
+      const p=['🚗','🚙','🚕','🚓','🚑'];
+      type=p[~~(Math.random()*p.length)];
+      speed=0.7+Math.random()*.5+diff*.06;
+      count=2+~~(Math.random()*2)+~~(diff/5);
+      spacing=220-diff*5;
     }
+    spacing=Math.max(spacing,wm*40+100);
+    out.push({row,speed,type,dir,count,spacing,wm,fast});
+  });
+  return out;
 }
-musicToggleBtn.addEventListener('click', toggleMusic);
+function buildVehicles(data){
+  vehicles=[]; data.forEach(l=>{ for(let i=0;i<l.count;i++) vehicles.push(new Vehicle(l.row*TILE,l.speed,l.type,l.dir,i*l.spacing,l.wm,l.fast)); });
+}
 
-/**
- * 遊戲動態難度生成器
- */
-function generateLaneConfig(currentLevel) {
-    const roadRows = [2, 3, 4, 6, 7, 8, 9, 10]; // 扣除溪邊、草地與人行島的行駛排數
-    const config = [];
-    
-    // 難度參數 (最多疊加到 15，避免遊戲後期變成不可能的任務)
-    const diffScale = Math.min(currentLevel, 15);
+// ═══════════════════════════════════════════════════════════
+// PARTICLES
+// ═══════════════════════════════════════════════════════════
+class Particle{
+  constructor(x,y,color,n=12){
+    this.dead=false; this.parts=[];
+    for(let i=0;i<n;i++){
+      const a=(Math.PI*2/n)*i+Math.random()*.5, sp=1.5+Math.random()*3;
+      this.parts.push({x:x+TILE/2,y:y+TILE/2,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,sz:2+Math.random()*3,life:1,color,dec:.04+Math.random()*.04});
+    }
+  }
+  update(){
+    this.parts.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=.15;p.vx*=.97;p.life-=p.dec;});
+    this.parts=this.parts.filter(p=>p.life>0); if(!this.parts.length) this.dead=true;
+  }
+  draw(){
+    this.parts.forEach(p=>{ctx.globalAlpha=p.life;ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(p.x,p.y,p.sz*p.life,0,Math.PI*2);ctx.fill();});
+    ctx.globalAlpha=1;
+  }
+}
 
-    roadRows.forEach(row => {
-        // 每關方向隨機重配
-        const dir = Math.random() > 0.5 ? 1 : -1;
-        
-        let type, speed, count, spacing, widthMult = 1, isFast = false;
-        const rand = Math.random();
-        
-        // 隨機決定車道類型 (根據關卡解鎖與機率)
-        if (currentLevel >= 3 && rand < 0.15 + (diffScale * 0.015)) {
-            // 跑車車道 (速度快，數量少)
-            type = '🏎️';
-            isFast = true;
-            speed = 3.5 + Math.random() * 1.5 + (diffScale * 0.15); // 最快可達 7.0 左右
-            count = 1 + Math.floor(Math.random() * 2);
-            spacing = 400 - (diffScale * 8); 
-        } else if (currentLevel >= 2 && rand < 0.35 + (diffScale * 0.01)) {
-            // 大卡車車道 (速度慢，車身長)
-            type = Math.random() > 0.5 ? '🚚' : '🚛';
-            widthMult = 2;
-            speed = 0.8 + Math.random() * 0.6 + (diffScale * 0.08);
-            count = 2 + Math.floor(Math.random() * 2); 
-            spacing = 280 - (diffScale * 10);
-        } else if (rand < 0.5) {
-            // 牽引車 (速度極慢當障礙)
-            type = '🚜';
-            speed = 0.6 + Math.random() * 0.4 + (diffScale * 0.05);
-            count = 2 + Math.floor(Math.random() * 2);
-            spacing = 220 - (diffScale * 5);
-        } else {
-            // 一般房車
-            const cars = ['🚗', '🚙', '🚕', '🚓'];
-            type = cars[Math.floor(Math.random() * cars.length)];
-            speed = 1.2 + Math.random() * 1.0 + (diffScale * 0.1);
-            count = 2 + Math.floor(Math.random() * 2) + Math.floor(diffScale / 4); // 數量隨關卡增加
-            spacing = 180 - (diffScale * 6);
-        }
-
-        // 確保間隔不會太小導致車子重疊，保留青蛙的生存空間
-        const minSpacing = (widthMult * 40) + 70; 
-        if (spacing < minSpacing) spacing = minSpacing;
-
-        config.push({
-            row: row,
-            speed: speed,
-            type: type,
-            dir: dir,
-            count: count,
-            spacing: spacing,
-            widthMult: widthMult,
-            isFast: isFast
-        });
+// ═══════════════════════════════════════════════════════════
+// FROG
+// ═══════════════════════════════════════════════════════════
+class Frog{
+  constructor(){ this.reset(); this.hitSz=TILE-14; this.jumpMs=130; this.arcH=28; this.trail=[]; }
+  reset(){
+    this.x=~~(COLS/2)*TILE; this.y=(ROWS-1)*TILE;
+    this.jumping=false; this.t=0; this.dead=false;
+    this.deadX=this.deadY=0; this.startY=this.y; this.targetY=this.y;
+    this.sqX=1; this.sqY=1; this.trail=[];
+  }
+  move(dy){
+    if(!isPlaying||this.jumping||this.dead) return;
+    const ny=this.y+dy*TILE; if(ny<0||ny>=LH) return;
+    this.jumping=true; this.t=0; this.startY=this.y; this.targetY=ny;
+    this.sqX=.65; this.sqY=1.35; sfx.jump();
+  }
+  update(dt){
+    if(this.dead) return;
+    if(this.jumping){
+      this.t=Math.min(1,this.t+dt/this.jumpMs);
+      if(this.t>=1){
+        this.jumping=false; this.y=this.targetY; this.t=0; this.sqX=1.3; this.sqY=.7;
+        this.trail.push({x:this.x+TILE/2,y:this.y+TILE/2,life:1});
+        if(this.trail.length>5) this.trail.shift();
+        if(this.y===0&&!this.dead) handleLevelUp();
+      }
+    }
+    this.sqX+=(1-this.sqX)*.22; this.sqY+=(1-this.sqY)*.22;
+    this.trail.forEach(p=>p.life-=.07); this.trail=this.trail.filter(p=>p.life>0);
+  }
+  getRY(){
+    if(!this.jumping) return this.y;
+    const e=this.t<.5?4*this.t**3:1-(-2*this.t+2)**3/2;
+    return this.startY+(this.targetY-this.startY)*e;
+  }
+  getArcOff(){ return this.jumping?Math.sin(this.t*Math.PI)*this.arcH:0; }
+  getHB(){ const ry=this.getRY(); return{x:this.x+7,y:ry+7,w:this.hitSz,h:this.hitSz}; }
+  draw(){
+    if(this.dead){ this.drawDead(); return; }
+    const ry=this.getRY(), arc=this.getArcOff(), cx=this.x+TILE/2, cy=ry+TILE/2-arc;
+    this.trail.forEach(p=>{
+      ctx.save(); ctx.globalAlpha=p.life*.22; ctx.font=`${~~(18*p.life)}px Arial`;
+      ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('🐸',p.x,p.y); ctx.restore();
     });
-
-    return config;
+    if(arc>2){
+      const ss=1-(arc/this.arcH)*.5; ctx.save(); ctx.globalAlpha=.22*ss; ctx.fillStyle='#000';
+      ctx.beginPath(); ctx.ellipse(cx,ry+TILE/2+6,10*ss,5*ss,0,0,Math.PI*2); ctx.fill(); ctx.restore();
+    }
+    ctx.save(); ctx.translate(cx,cy); ctx.scale(this.sqX,this.sqY);
+    ctx.font='28px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('🐸',0,0); ctx.restore();
+  }
+  drawDead(){
+    const dx=this.deadX, dy=this.deadY;
+    ctx.save(); ctx.translate(dx+TILE/2,dy+TILE/2); ctx.rotate(Math.PI*.5); ctx.globalAlpha=.8;
+    ctx.font='28px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('🐸',0,0); ctx.restore();
+    ctx.strokeStyle='#ff3355'; ctx.lineWidth=2.5; ctx.lineCap='round';
+    const ex=dx+TILE/2, ey=dy+TILE/2;
+    ctx.beginPath();
+    ctx.moveTo(ex-8,ey-4); ctx.lineTo(ex-2,ey+2); ctx.moveTo(ex-2,ey-4); ctx.lineTo(ex-8,ey+2);
+    ctx.moveTo(ex+2,ey-4); ctx.lineTo(ex+8,ey+2); ctx.moveTo(ex+8,ey-4); ctx.lineTo(ex+2,ey+2);
+    ctx.stroke();
+  }
 }
 
-function initLanes(laneConfigData) {
-    vehicles = [];
-    laneConfigData.forEach(config => {
-        const y = config.row * TILE_SIZE;
-        for (let i = 0; i < config.count; i++) {
-            const gap = i * config.spacing;
-            vehicles.push(new Vehicle(y, config.speed, config.type, config.dir, gap, config.widthMult, config.isFast));
-        }
-    });
+// ═══════════════════════════════════════════════════════════
+// VEHICLE
+// ═══════════════════════════════════════════════════════════
+class Vehicle{
+  constructor(y,speed,type,dir,gap,wm,fast){
+    this.y=y; this.speed=speed; this.type=type; this.dir=dir;
+    this.wm=wm; this.width=TILE*wm; this.fast=fast;
+    this.x=dir===1?-this.width-gap:LW+gap;
+  }
+  update(){
+    this.x+=this.speed*this.dir;
+    if(this.dir===1&&this.x>LW+70) this.x=-this.width-70;
+    if(this.dir===-1&&this.x<-this.width-70) this.x=LW+70;
+  }
+  draw(){
+    const th=T();
+    // Motion blur lines
+    if(this.fast){
+      const col=isDay?'rgba(200,100,0,.35)':'rgba(255,150,50,.5)';
+      ctx.save(); ctx.strokeStyle=col; ctx.lineWidth=1.5; ctx.lineCap='round';
+      for(let i=0;i<4;i++){
+        const lx=this.x+(this.dir===1?-6-i*12:this.width+6+i*12), ly=this.y+8+i*8, len=6+Math.random()*12;
+        ctx.beginPath(); ctx.moveTo(lx,ly); ctx.lineTo(lx+(this.dir===1?-len:len),ly); ctx.stroke();
+      }
+      ctx.restore();
+    }
+    if(this.wm>1){ this.drawTruck(th); return; }
+    // Night headlights
+    if(!isDay){
+      ctx.save(); ctx.globalAlpha=.75;
+      ctx.fillStyle='rgba(255,240,150,.9)';
+      const hlx=this.dir===1?this.x+this.width-2:this.x-2;
+      ctx.beginPath(); ctx.ellipse(hlx,this.y+TILE/2,3,5,0,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
+    ctx.save(); ctx.translate(this.x+TILE/2,this.y+TILE/2);
+    ctx.font='26px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    if(this.dir===1) ctx.scale(-1,1);
+    ctx.fillText(this.type,0,0); ctx.restore();
+  }
+  drawTruck(th){
+    const pad=4,h=TILE-8,w=this.width-pad*2,sx=this.x+pad,sy=this.y+4;
+    const cabW=22,gapW=3,trailerW=w-cabW-gapW;
+    const cabX=this.dir===1?sx+trailerW+gapW:sx, trX=this.dir===1?sx:sx+cabW+gapW;
+    ctx.save();
+    ctx.fillStyle=th.truckBody(this.dir); ctx.beginPath(); ctx.roundRect(trX,sy,trailerW,h,3); ctx.fill();
+    ctx.fillStyle=th.truckCab; ctx.beginPath(); ctx.roundRect(cabX,sy+5,cabW,h-5,4); ctx.fill();
+    ctx.fillStyle=th.truckWin;
+    const winX=this.dir===1?cabX+cabW-9:cabX+2;
+    ctx.beginPath(); ctx.roundRect(winX,sy+8,7,h-14,2); ctx.fill();
+    if(!isDay){ ctx.fillStyle='rgba(255,240,100,.9)'; const hlX=this.dir===1?cabX+cabW-3:cabX-1; ctx.fillRect(hlX,sy+h-10,3,5); }
+    ctx.fillStyle=th.truckWheel;
+    [[trX+10],[trX+trailerW-10],[this.dir===1?cabX+cabW-7:cabX+7]].forEach(([wx])=>{ctx.beginPath();ctx.arc(wx,sy+h+1,4,0,Math.PI*2);ctx.fill();});
+    ctx.restore();
+  }
 }
 
-/**
- * 遊戲物件
- */
-class Frog {
-    constructor() {
-        this.reset();
-        this.size = TILE_SIZE - 12;
-        this.jumpDuration = 200;
-        this.jumpHeightMax = 25;
-        this.deadX = 0;
-        this.deadY = 0;
+// ═══════════════════════════════════════════════════════════
+// COLLISION & EVENTS
+// ═══════════════════════════════════════════════════════════
+function checkCollisions(){
+  if(frog.dead) return;
+  const f=frog.getHB();
+  // 寬容碰撞判定：margin 加大，小朋友更容易閃過
+  for(const v of vehicles){
+    if(f.x<v.x+v.width-10&&f.x+f.w>v.x+10&&f.y<v.y+TILE-8&&f.y+f.h>v.y+8){
+      handleCrash(frog.getRY()); return;
     }
-
-    reset() {
-        this.x = Math.floor(COLS / 2) * TILE_SIZE; 
-        this.y = (ROWS - 1) * TILE_SIZE;
-        this.isJumping = false;
-        this.jumpProgress = 0;
-        this.isDead = false;
-    }
-
-    move(dy) {
-        if (!isPlaying || this.isJumping || this.isDead) return;
-        
-        const newY = this.y + dy * TILE_SIZE;
-        if (newY >= 0 && newY < LOGICAL_HEIGHT) {
-            this.isJumping = true;
-            this.jumpProgress = 0;
-            this.startY = this.y;
-            this.targetY = newY;
-            sfx.jump();
-        }
-    }
-
-    update(dt) {
-        if (this.isDead) return;
-
-        if (this.isJumping) {
-            this.jumpProgress += dt / this.jumpDuration;
-            if (this.jumpProgress >= 1) {
-                this.isJumping = false;
-                this.y = this.targetY;
-                this.jumpProgress = 0;
-                
-                if (this.y === 0 && !this.isDead) {
-                    handleLevelUp();
-                }
-            }
-        }
-    }
-
-    draw() {
-        if (this.isDead) {
-            const dx = this.deadX;
-            const dy = this.deadY;
-
-            ctx.fillStyle = '#991b1b';
-            ctx.beginPath();
-            ctx.ellipse(dx + TILE_SIZE / 2, dy + TILE_SIZE / 2 + 5, 25, 12, 0, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.beginPath();
-            ctx.ellipse(dx + TILE_SIZE / 2 - 8, dy + TILE_SIZE / 2, 12, 16, Math.PI/4, 0, Math.PI * 2);
-            ctx.fill();
-
-            ctx.fillStyle = '#16a34a'; 
-            ctx.beginPath();
-            ctx.ellipse(dx + TILE_SIZE / 2, dy + TILE_SIZE / 2 + 5, 20, 8, 0, 0, Math.PI * 2);
-            ctx.fill();
-
-            ctx.strokeStyle = '#15803d'; 
-            ctx.lineWidth = 4;
-            ctx.lineCap = 'round';
-            ctx.beginPath();
-            ctx.moveTo(dx + 12, dy + TILE_SIZE / 2 + 2); ctx.lineTo(dx + 2, dy + TILE_SIZE / 2 - 4);
-            ctx.moveTo(dx + 12, dy + TILE_SIZE / 2 + 8); ctx.lineTo(dx + 2, dy + TILE_SIZE / 2 + 16);
-            ctx.moveTo(dx + TILE_SIZE - 12, dy + TILE_SIZE / 2 + 2); ctx.lineTo(dx + TILE_SIZE - 2, dy + TILE_SIZE / 2 - 4);
-            ctx.moveTo(dx + TILE_SIZE - 12, dy + TILE_SIZE / 2 + 8); ctx.lineTo(dx + TILE_SIZE - 2, dy + TILE_SIZE / 2 + 16);
-            ctx.stroke();
-
-            ctx.strokeStyle = '#000';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            let ex1 = dx + TILE_SIZE / 2 - 6; let ey = dy + TILE_SIZE / 2 + 3;
-            ctx.moveTo(ex1 - 3, ey - 3); ctx.lineTo(ex1 + 3, ey + 3);
-            ctx.moveTo(ex1 + 3, ey - 3); ctx.lineTo(ex1 - 3, ey + 3);
-
-            let ex2 = dx + TILE_SIZE / 2 + 6;
-            ctx.moveTo(ex2 - 3, ey - 3); ctx.lineTo(ex2 + 3, ey + 3);
-            ctx.moveTo(ex2 + 3, ey - 3); ctx.lineTo(ex2 - 3, ey + 3);
-            ctx.stroke();
-
-            return; 
-        }
-
-        let renderY = this.y;
-        let zOffset = 0;
-
-        if (this.isJumping) {
-            renderY = this.startY + (this.targetY - this.startY) * this.jumpProgress;
-            zOffset = Math.sin(this.jumpProgress * Math.PI) * this.jumpHeightMax;
-        }
-
-        ctx.font = '30px Arial';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        
-        if (this.isJumping) {
-            ctx.fillStyle = 'rgba(0,0,0,0.3)';
-            const shadowScale = 1 - (zOffset / this.jumpHeightMax) * 0.5;
-            ctx.beginPath();
-            ctx.ellipse(this.x + TILE_SIZE / 2, renderY + TILE_SIZE / 2 + 10, 12 * shadowScale, 6 * shadowScale, 0, 0, Math.PI * 2);
-            ctx.fill();
-        }
-
-        ctx.fillText('🐸', this.x + TILE_SIZE / 2, renderY + TILE_SIZE / 2 - zOffset);
-    }
-    
-    getHitbox() {
-        const currentY = this.isJumping ? this.startY + (this.targetY - this.startY) * this.jumpProgress : this.y;
-        return { x: this.x, y: currentY, size: this.size };
-    }
+  }
+}
+function handleCrash(ry){
+  frog.dead=true; frog.deadX=frog.x; frog.deadY=ry;
+  sfx.crash(); screenFlash('red');
+  $('canvas-container').classList.add('shake');
+  setTimeout(()=>$('canvas-container').classList.remove('shake'),400);
+  particles.push(new Particle(frog.x,ry,'#ff3355',16));
+  setTimeout(()=>{ lives=Math.max(0,lives-1); updateUI(); lives<=0?gameOver():frog.reset(); },1200);
+}
+function handleLevelUp(){
+  sfx.levelUp(); screenFlash('green');
+  score+=100+level*25; level++;
+  isDay=!isDay; applyDayNightUI(); // flip day/night each level
+  updateUI(); frog.reset(); buildVehicles(generateLanes(level));
+  particles.push(new Particle(frog.x,0,'#00ff88',20));
+  toastNum.textContent=`LVL ${level}`;
+  toastSub.textContent=isDay?'☀️ 白天降臨':'🌙 夜幕低垂';
+  toast.classList.remove('show'); void toast.offsetWidth; toast.classList.add('show');
 }
 
-class Vehicle {
-    constructor(y, speed, type, direction, gap, widthMult, isFast) {
-        this.y = y;
-        this.speed = speed; // 動態難度已經計算好，直接使用
-        this.type = type;
-        this.direction = direction;
-        this.widthMult = widthMult; 
-        this.width = TILE_SIZE * widthMult;
-        this.isFast = isFast; 
-        this.x = direction === 1 ? -this.width - gap : LOGICAL_WIDTH + gap;
+// ═══════════════════════════════════════════════════════════
+// UI
+// ═══════════════════════════════════════════════════════════
+function updateUI(){
+  const old=parseInt(scoreVal.textContent)||0; scoreVal.textContent=score;
+  if(score>old){scoreVal.classList.remove('pop');void scoreVal.offsetWidth;scoreVal.classList.add('pop');}
+  levelVal.textContent=level; levelVal.classList.remove('pop'); void levelVal.offsetWidth; levelVal.classList.add('pop');
+  livesDots.innerHTML='';
+  for(let i=0;i<5;i++){const d=document.createElement('div');d.className='life-dot'+(i>=lives?' empty':'');livesDots.appendChild(d);}
+  if(frog&&!frog.dead) progressFill.style.width=((1-frog.getRY()/((ROWS-1)*TILE))*100).toFixed(1)+'%';
+}
+function screenFlash(type){ flashEl.className=''; void flashEl.offsetWidth; flashEl.className=type; }
+
+// ═══════════════════════════════════════════════════════════
+// BACKGROUND — DAY / NIGHT THEMED
+// ═══════════════════════════════════════════════════════════
+function drawBG(){
+  bgTime+=.016;
+  const th=T();
+
+  // Sky row 0
+  if(isDay){
+    const g=ctx.createLinearGradient(0,0,0,TILE); g.addColorStop(0,th.sky0); g.addColorStop(1,th.sky1);
+    ctx.fillStyle=g; ctx.fillRect(0,0,LW,TILE);
+    // Sun
+    ctx.save(); ctx.fillStyle='#ffe040'; ctx.globalAlpha=.9;
+    ctx.beginPath(); ctx.arc(345,18,10,0,Math.PI*2); ctx.fill();
+    ctx.globalAlpha=.1; ctx.fillStyle='#ffee00';
+    ctx.beginPath(); ctx.arc(345,18,20,0,Math.PI*2); ctx.fill(); ctx.restore();
+    // Clouds
+    for(let i=0;i<3;i++){
+      const cx2=((i*130+bgTime*7)%460)-30, cy2=7;
+      ctx.save(); ctx.fillStyle='rgba(255,255,255,0.72)';
+      ctx.beginPath();
+      ctx.ellipse(cx2,cy2+6,22,8,0,0,Math.PI*2); ctx.ellipse(cx2+14,cy2+2,16,10,0,0,Math.PI*2);
+      ctx.ellipse(cx2-10,cy2+2,12,8,0,0,Math.PI*2); ctx.fill(); ctx.restore();
     }
-
-    update() {
-        this.x += this.speed * this.direction;
-        
-        if (this.direction === 1 && this.x > LOGICAL_WIDTH + 50) {
-            this.x = -this.width - 50;
-        } else if (this.direction === -1 && this.x < -this.width - 50) {
-            this.x = LOGICAL_WIDTH + 50;
-        }
+  } else {
+    const g=ctx.createLinearGradient(0,0,0,TILE); g.addColorStop(0,th.sky0); g.addColorStop(1,th.sky1);
+    ctx.fillStyle=g; ctx.fillRect(0,0,LW,TILE);
+    // Stars
+    for(let i=0;i<18;i++){
+      const sx=(i*31+12)%LW, sy=(i*17+5)%(TILE-6)+3;
+      ctx.globalAlpha=.3+.5*(.5+.5*Math.sin(bgTime*2+i));
+      ctx.fillStyle='#fff'; ctx.fillRect(sx,sy,1.5,1.5);
     }
+    ctx.globalAlpha=1;
+    // Crescent moon
+    ctx.save(); ctx.globalAlpha=.9; ctx.fillStyle='#f5e89a';
+    ctx.beginPath(); ctx.arc(345,18,9,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=th.sky0; ctx.beginPath(); ctx.arc(349,16,7,0,Math.PI*2); ctx.fill(); ctx.restore();
+  }
 
-    draw() {
-        if (this.isFast) {
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
-            ctx.lineWidth = 2;
-            ctx.lineCap = 'round';
-            ctx.beginPath();
-            for (let i = 1; i <= 3; i++) {
-                let lineLength = 10 + Math.random() * 15;
-                let offsetX = this.direction === 1 ? -i * 20 : this.width + i * 20;
-                let offsetY = this.y + 10 + Math.random() * 20;
-                
-                ctx.moveTo(this.x + offsetX, offsetY);
-                ctx.lineTo(this.x + offsetX + (this.direction === 1 ? -lineLength : lineLength), offsetY);
-            }
-            ctx.stroke();
-        }
+  // Sidewalk top (row 1)
+  ctx.fillStyle=th.sidewalk; ctx.fillRect(0,TILE,LW,TILE);
+  ctx.fillStyle=th.swMark; for(let i=0;i<5;i++) ctx.fillRect(i*84+20,TILE+14,50,4);
 
-        if (this.widthMult > 1) {
-            ctx.save();
-            const paddingX = 4, paddingY = 6;
-            const w = this.width - paddingX * 2, h = TILE_SIZE - paddingY * 2;
-            const startX = this.x + paddingX, startY = this.y + paddingY;
-            const cabWidth = 20, gap = 3, trailerWidth = w - cabWidth - gap;
+  // Upper road (rows 2–4)
+  ctx.fillStyle=th.road; ctx.fillRect(0,2*TILE,LW,3*TILE);
+  ctx.strokeStyle=th.dashLine; ctx.lineWidth=2; ctx.setLineDash([16,22]);
+  [3,4].forEach(r=>{ctx.beginPath();ctx.moveTo(0,r*TILE);ctx.lineTo(LW,r*TILE);ctx.stroke();});
+  ctx.setLineDash([]);
+  ctx.strokeStyle=th.edgeLine; ctx.lineWidth=3;
+  ctx.beginPath(); ctx.moveTo(0,2*TILE+1); ctx.lineTo(LW,2*TILE+1); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0,5*TILE-1); ctx.lineTo(LW,5*TILE-1); ctx.stroke();
 
-            const trailerColor = this.direction === 1 ? '#047857' : '#1d4ed8'; 
-            const cabColor = '#fbbf24', windowColor = '#93c5fd', wheelColor = '#1f2937'; 
+  // Median (row 5)
+  ctx.fillStyle=th.median; ctx.fillRect(0,5*TILE,LW,TILE);
+  for(let i=0;i<10;i++){
+    const bx=i*40+4, by=5*TILE+4;
+    ctx.fillStyle=th.bush0; ctx.beginPath(); ctx.ellipse(bx+18,by+16,14,16,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=th.bush1; ctx.beginPath(); ctx.ellipse(bx+18,by+12,10,12,0,0,Math.PI*2); ctx.fill();
+  }
 
-            let cabX, trailerX;
-            if (this.direction === 1) {
-                trailerX = startX; cabX = startX + trailerWidth + gap;
-            } else {
-                cabX = startX; trailerX = startX + cabWidth + gap;
-            }
+  // Lower road (rows 6–10)
+  ctx.fillStyle=th.roadAlt; ctx.fillRect(0,6*TILE,LW,5*TILE);
+  ctx.strokeStyle=th.dashLine; ctx.lineWidth=2; ctx.setLineDash([16,22]);
+  [7,8,9,10].forEach(r=>{
+    const off=((bgTime*15)%38)*(r%2===0?1:-1);
+    ctx.save(); ctx.translate(off,0);
+    ctx.beginPath(); ctx.moveTo(-50,r*TILE); ctx.lineTo(LW+50,r*TILE); ctx.stroke(); ctx.restore();
+  });
+  ctx.setLineDash([]);
+  ctx.strokeStyle=th.edgeLine; ctx.lineWidth=3;
+  ctx.beginPath(); ctx.moveTo(0,6*TILE+1); ctx.lineTo(LW,6*TILE+1); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0,11*TILE-1); ctx.lineTo(LW,11*TILE-1); ctx.stroke();
 
-            ctx.fillStyle = trailerColor;
-            ctx.beginPath(); ctx.roundRect(trailerX, startY, trailerWidth, h, 3); ctx.fill();
-            
-            ctx.strokeStyle = 'rgba(0,0,0,0.2)'; ctx.lineWidth = 2; ctx.beginPath();
-            ctx.moveTo(trailerX + 8, startY + 4); ctx.lineTo(trailerX + 8, startY + h - 4);
-            ctx.moveTo(trailerX + trailerWidth / 2, startY + 4); ctx.lineTo(trailerX + trailerWidth / 2, startY + h - 4);
-            ctx.moveTo(trailerX + trailerWidth - 8, startY + 4); ctx.lineTo(trailerX + trailerWidth - 8, startY + h - 4);
-            ctx.stroke();
+  // Sidewalk bottom (row 11)
+  ctx.fillStyle=th.sidewalk; ctx.fillRect(0,11*TILE,LW,TILE);
+  ctx.fillStyle=th.swMark; for(let i=0;i<5;i++) ctx.fillRect(i*84+20,11*TILE+14,50,4);
 
-            ctx.fillStyle = '#4b5563';
-            if (this.direction === 1) ctx.fillRect(trailerX + trailerWidth, startY + h - 6, gap, 4);
-            else ctx.fillRect(cabX + cabWidth, startY + h - 6, gap, 4);
+  // ── STREAM / RIVER (row 12 — goal) ──
+  const sy12 = 12*TILE;
+  // Water base — day vs night tint
+  const wg = ctx.createLinearGradient(0, sy12, 0, sy12+TILE);
+  if(isDay){
+    wg.addColorStop(0,'#42b4e8'); wg.addColorStop(1,'#2a9cd4');
+  } else {
+    wg.addColorStop(0,'#0e3860'); wg.addColorStop(1,'#082a4a');
+  }
+  ctx.fillStyle=wg; ctx.fillRect(0,sy12,LW,TILE);
 
-            ctx.fillStyle = cabColor;
-            ctx.beginPath(); ctx.roundRect(cabX, startY + 6, cabWidth, h - 6, 4); ctx.fill();
-
-            ctx.fillStyle = windowColor;
-            ctx.beginPath();
-            if (this.direction === 1) ctx.roundRect(cabX + cabWidth - 8, startY + 8, 6, h - 14, 2);
-            else ctx.roundRect(cabX + 2, startY + 8, 6, h - 14, 2);
-            ctx.fill();
-
-            ctx.fillStyle = wheelColor;
-            const wheelY = startY + h, wheelR = 4;
-            const drawWheel = (wx) => { ctx.beginPath(); ctx.arc(wx, wheelY, wheelR, 0, Math.PI * 2); ctx.fill(); };
-            if (this.direction === 1) {
-                drawWheel(trailerX + 10); drawWheel(trailerX + trailerWidth - 10); drawWheel(cabX + cabWidth - 6);
-            } else {
-                drawWheel(trailerX + trailerWidth - 10); drawWheel(trailerX + 10); drawWheel(cabX + 6);
-            }
-            ctx.restore();
-            return; 
-        }
-
-        ctx.save();
-        ctx.globalAlpha = 1.0; 
-        let cabCenterX = this.x + TILE_SIZE / 2;
-        ctx.translate(cabCenterX, this.y + TILE_SIZE / 2);
-        ctx.font = '26px Arial';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        if (this.direction === 1) ctx.scale(-1, 1);
-        ctx.fillText(this.type, 0, 0);
-        ctx.restore();
+  // Animated water ripple lines
+  const rippleAlpha = isDay ? 0.22 : 0.18;
+  ctx.save();
+  ctx.strokeStyle = isDay ? 'rgba(255,255,255,0.55)' : 'rgba(100,180,255,0.4)';
+  ctx.lineWidth = 1.5; ctx.lineCap = 'round';
+  for(let r=0;r<4;r++){
+    const yOff = sy12 + 8 + r*10;
+    const shift = ((bgTime * 28 + r*22) % (LW+60)) - 30;
+    for(let w=0;w<5;w++){
+      const wx = (shift + w*82) % (LW+40) - 20;
+      ctx.globalAlpha = rippleAlpha * (0.6+0.4*Math.sin(bgTime*2+r+w));
+      ctx.beginPath();
+      ctx.moveTo(wx, yOff);
+      ctx.bezierCurveTo(wx+8, yOff-3, wx+16, yOff+3, wx+24, yOff);
+      ctx.stroke();
     }
-}
+  }
+  ctx.restore();
 
-let frog;
-let vehicles = [];
+  // Light shimmer patches
+  ctx.save();
+  for(let s=0;s<6;s++){
+    const sx2 = ((bgTime*18 + s*68) % (LW+30)) - 15;
+    const sy2 = sy12 + 6 + (s%3)*12;
+    const shimAlpha = (isDay?0.18:0.1) * (0.5+0.5*Math.sin(bgTime*3+s));
+    ctx.globalAlpha = shimAlpha;
+    ctx.fillStyle = isDay?'#fff':'#7fd4ff';
+    ctx.beginPath();
+    ctx.ellipse(sx2, sy2, 14, 4, 0.3, 0, Math.PI*2);
+    ctx.fill();
+  }
+  ctx.restore();
 
-function checkCollisions() {
-    if (frog.isDead) return;
+  // Rocks / stepping stones (5 positions)
+  const rockPos = [28, 102, 186, 268, 352];
+  rockPos.forEach((rx, i) => {
+    const ry = sy12 + 10 + (i%2)*12;
+    // Rock shadow / wake
+    ctx.save(); ctx.globalAlpha=.2; ctx.fillStyle='#000';
+    ctx.beginPath(); ctx.ellipse(rx+14, ry+16, 13, 5, 0, 0, Math.PI*2); ctx.fill(); ctx.restore();
+    // Rock body
+    const rg = ctx.createRadialGradient(rx+10,ry+8,2,rx+13,ry+11,14);
+    rg.addColorStop(0, isDay?'#c8c0b0':'#5a5260');
+    rg.addColorStop(1, isDay?'#9a9080':'#3a3445');
+    ctx.fillStyle=rg;
+    ctx.beginPath(); ctx.ellipse(rx+13, ry+11, 13, 9, -0.2, 0, Math.PI*2); ctx.fill();
+    // Rock highlight
+    ctx.save(); ctx.globalAlpha=.35; ctx.fillStyle='#fff';
+    ctx.beginPath(); ctx.ellipse(rx+10, ry+8, 5, 3, -0.4, 0, Math.PI*2); ctx.fill(); ctx.restore();
+    // Moss
+    ctx.save(); ctx.globalAlpha=.5; ctx.fillStyle=isDay?'#5a9e3a':'#2d6020';
+    ctx.beginPath(); ctx.ellipse(rx+13, ry+7, 4, 2, 0, 0, Math.PI*2); ctx.fill(); ctx.restore();
+    // Wake ripple behind rock
+    ctx.save(); ctx.strokeStyle=isDay?'rgba(255,255,255,0.3)':'rgba(100,180,255,0.25)';
+    ctx.lineWidth=1; ctx.globalAlpha=.7;
+    ctx.beginPath(); ctx.ellipse(rx+13, ry+11, 18, 7, 0, 0, Math.PI*2); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(rx+13, ry+11, 25, 10, 0, 0, Math.PI*2); ctx.stroke();
+    ctx.restore();
+  });
 
-    const hitboxMargin = 10;
-    const fBox = frog.getHitbox();
-    
-    for (let v of vehicles) {
-        if (
-            fBox.x + hitboxMargin < v.x + v.width - hitboxMargin &&
-            fBox.x + fBox.size - hitboxMargin > v.x + hitboxMargin &&
-            fBox.y + hitboxMargin < v.y + TILE_SIZE - hitboxMargin &&
-            fBox.y + fBox.size - hitboxMargin > v.y + hitboxMargin
-        ) {
-            handleCrash(fBox.x, fBox.y);
-            return;
-        }
+  // Goal: floating 🏁 flag signs at each rock
+  ctx.save();
+  ctx.font = '14px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  rockPos.forEach(rx => {
+    ctx.fillText('🏁', rx+13, sy12+4);
+  });
+  ctx.restore();
+
+  // Shore edges (top & bottom of stream)
+  ctx.save();
+  ctx.fillStyle = isDay?'#c8a878':'#1a1f3a'; ctx.fillRect(0, sy12, LW, 4);
+  ctx.fillStyle = isDay?'#c8a878':'#1a1f3a'; ctx.fillRect(0, sy12+TILE-4, LW, 4);
+  // Grass tufts along shore
+  const tufts = [15,55,95,135,175,215,255,295,335,375];
+  tufts.forEach(tx => {
+    ctx.fillStyle = isDay?'#5da830':'#1d5a28'; ctx.globalAlpha=.8;
+    ctx.beginPath(); ctx.ellipse(tx, sy12+2, 6, 4, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(tx, sy12+TILE-2, 6, 4, 0, 0, Math.PI*2); ctx.fill();
+  });
+  ctx.restore();
+
+  // Street lights
+  const poles=[[60,TILE+8],[200,TILE+8],[340,TILE+8],[60,11*TILE+8],[200,11*TILE+8],[340,11*TILE+8]];
+  poles.forEach(([px,py])=>{
+    ctx.strokeStyle=th.poleOn?'#334':'#999'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(px,py+TILE-2); ctx.lineTo(px,py+4); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(px,py+4); ctx.lineTo(px+13,py+4); ctx.stroke();
+    if(th.poleOn){
+      const pulse=.75+.25*Math.sin(bgTime*3+px);
+      ctx.save(); ctx.globalAlpha=pulse;
+      ctx.fillStyle='#ffe060'; ctx.beginPath(); ctx.arc(px+13,py+4,3,0,Math.PI*2); ctx.fill();
+      ctx.globalAlpha=pulse*.06; ctx.fillStyle='#ffe060';
+      ctx.beginPath(); ctx.moveTo(px+13,py+4); ctx.lineTo(px-8,py+32); ctx.lineTo(px+34,py+32); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    } else {
+      ctx.fillStyle='#aaa'; ctx.beginPath(); ctx.arc(px+13,py+4,3,0,Math.PI*2); ctx.fill();
     }
+  });
+
+  // Daytime brightness overlay
+  if(isDay){
+    ctx.save(); ctx.globalAlpha=.035; ctx.fillStyle='#fff9e0'; ctx.fillRect(0,0,LW,LH); ctx.restore();
+  }
 }
 
-function handleCrash(crashX, crashY) {
-    frog.isDead = true;
-    frog.deadX = crashX;
-    frog.deadY = crashY;
-    
-    sfx.crash();
-    canvas.classList.add('shake-anim');
-    setTimeout(() => canvas.classList.remove('shake-anim'), 300);
-
-    setTimeout(() => {
-        lives--;
-        updateUI();
-        if (lives <= 0) gameOver();
-        else frog.reset(); 
-    }, 1500); 
+// ═══════════════════════════════════════════════════════════
+// GAME LOOP
+// ═══════════════════════════════════════════════════════════
+function gameLoop(ts){
+  if(!isPlaying) return;
+  let dt=ts-lastTs; if(dt>100) dt=16; lastTs=ts;
+  ctx.clearRect(0,0,LW,LH);
+  drawBG();
+  vehicles.forEach(v=>{v.update();v.draw();});
+  particles.forEach(p=>{p.update();p.draw();}); particles=particles.filter(p=>!p.dead);
+  frog.update(dt); frog.draw();
+  checkCollisions(); updateUI();
+  rafId=requestAnimationFrame(gameLoop);
 }
 
-function handleLevelUp() {
-    sfx.levelUp();
-    level++;
-    score += 100 + (level * 20);
-    updateUI();
-    frog.reset();
-    
-    // 動態生成新的車流配置
-    const newLaneConfig = generateLaneConfig(level);
-    initLanes(newLaneConfig);
-    
-    // 顯示關卡動畫
-    levelUpMsg.querySelector('div:first-child').innerText = `第 ${level} 關!`;
-    levelUpMsg.classList.remove('level-up-anim');
-    void levelUpMsg.offsetWidth; 
-    levelUpMsg.classList.add('level-up-anim');
+// ═══════════════════════════════════════════════════════════
+// GAME FLOW
+// ═══════════════════════════════════════════════════════════
+function startGame(){
+  score=0; lives=5; level=1; isDay=false; applyDayNightUI();
+  updateUI(); frog=new Frog(); particles=[];
+  buildVehicles(generateLanes(level));
+  isPlaying=true; gameOverShown=false;
+  overlay.classList.add('hidden');
+  overlay.classList.remove('gameover');
+  $('overlay-info').style.display='block';
+  scoreDisp.style.display='none';
+  $('any-key-hint').style.display='none';
+  const l1=document.querySelector('#overlay .line1');
+  l1.textContent='ROAD FROG'; l1.removeAttribute('style');
+  const fi=$('game-title').querySelector('.frog-icon');
+  fi.style.animation=''; fi.style.transform='';
+  document.querySelector('#overlay .line2').textContent='越 街 狂 蛙';
+  startBtn.textContent='🐸 開始遊戲'; startBtn.style.display='block';
+  if(!isSoundOn){isSoundOn=true;soundBtn.textContent='♪';soundBtn.classList.add('active');}
+  if(AC?.state==='suspended') AC.resume();
+  startAmbient();
+  cancelAnimationFrame(rafId); lastTs=performance.now();
+  rafId=requestAnimationFrame(gameLoop);
 }
-
-function updateUI() {
-    scoreEl.innerText = score;
-    livesEl.innerText = lives;
-    levelEl.innerText = level;
-}
-
-function gameOver() {
-    isPlaying = false;
-    titleEl.innerText = "遊戲結束";
-    titleEl.className = "text-5xl font-extrabold text-red-500 mb-4 tracking-wider shadow-sm";
-    messageEl.innerHTML = `抵達關卡: <span class="text-blue-400 font-bold">第 ${level} 關</span><br>最終分數: <span class="text-yellow-400 font-bold text-2xl">${score}</span><br><br>再來挑戰一次吧！`;
-    startBtn.innerText = "重新開始";
+function gameOver(){
+  isPlaying=false; cancelAnimationFrame(rafId); stopAmbient(); gameOverShown=true;
+  setTimeout(()=>{
     overlay.classList.remove('hidden');
-    overlay.classList.replace('opacity-0', 'opacity-100');
+    overlay.classList.add('gameover');
+    const l1=document.querySelector('#overlay .line1');
+    l1.textContent='遊戲結束！'; l1.style.cssText='';
+    document.querySelector('#overlay .line2').textContent=`抵達第 ${level} 關`;
+    $('overlay-info').style.display='none';
+    scoreDisp.style.display='block';
+    finalScore.textContent=score;
+    $('overlay-level-tag').textContent=`第 ${level} 關 · 繼續加油！`;
+    startBtn.textContent='🔄 再挑戰一次'; startBtn.style.display='block';
+    $('any-key-hint').style.display='block';
+  },600);
 }
 
-function startGame() {
-    score = 0;
-    lives = 3;
-    level = 1;
-    updateUI();
-    frog = new Frog();
-    
-    // 初始化第一關車流配置
-    const initialLaneConfig = generateLaneConfig(level);
-    initLanes(initialLaneConfig);
-    
-    isPlaying = true;
-    
-    overlay.classList.replace('opacity-100', 'opacity-0');
-    setTimeout(() => { if(isPlaying) overlay.classList.add('hidden'); }, 300);
-    
-    if (audioCtx.state === 'suspended') audioCtx.resume();
-    
-    cancelAnimationFrame(animationId);
-    lastTime = performance.now();
-    animationId = requestAnimationFrame(gameLoop);
-}
-
-function drawBackground() {
-    ctx.globalAlpha = 1.0; 
-    ctx.fillStyle = '#1e3a8a'; ctx.fillRect(0, 0, LOGICAL_WIDTH, TILE_SIZE);
-    
-    ctx.fillStyle = '#3b82f6'; 
-    for(let i=0; i<5; i++) {
-        ctx.fillRect(i*80 + (Date.now()/50)%40, 10, 20, 4);
-        ctx.fillRect(i*80 + 40 - (Date.now()/40)%40, 25, 15, 4);
-    }
-    
-    ctx.fillStyle = '#22c55e'; ctx.fillRect(0, TILE_SIZE, LOGICAL_WIDTH, TILE_SIZE);
-    ctx.fillStyle = '#374151'; ctx.fillRect(0, 2 * TILE_SIZE, LOGICAL_WIDTH, 3 * TILE_SIZE);
-    
-    ctx.fillStyle = '#22c55e'; ctx.fillRect(0, 5 * TILE_SIZE, LOGICAL_WIDTH, TILE_SIZE);
-    ctx.fillStyle = '#166534';
-    for(let i=0; i<10; i++) ctx.fillRect(i*40 + 15, 5 * TILE_SIZE + 15, 4, 8);
-    
-    ctx.fillStyle = '#374151'; ctx.fillRect(0, 6 * TILE_SIZE, LOGICAL_WIDTH, 5 * TILE_SIZE);
-    ctx.fillStyle = '#22c55e'; ctx.fillRect(0, 11 * TILE_SIZE, LOGICAL_WIDTH, TILE_SIZE);
-
-    ctx.strokeStyle = '#9ca3af'; ctx.lineWidth = 2; ctx.setLineDash([15, 20]); ctx.beginPath();
-    [3, 4, 7, 8, 9, 10].forEach(row => {
-        ctx.moveTo(0, row * TILE_SIZE); ctx.lineTo(LOGICAL_WIDTH, row * TILE_SIZE);
-    });
-    ctx.stroke(); ctx.setLineDash([]); 
-}
-
-function gameLoop(timestamp) {
-    if (!isPlaying) return;
-
-    let dt = timestamp - lastTime;
-    if (dt > 100) dt = 16;
-    lastTime = timestamp;
-
-    ctx.clearRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
-    drawBackground();
-
-    vehicles.forEach(v => { v.update(); v.draw(); });
-
-    frog.update(dt);
-    frog.draw();
-
-    checkCollisions();
-    animationId = requestAnimationFrame(gameLoop);
-}
-
-window.addEventListener('keydown', (e) => {
-    if(["ArrowUp","ArrowDown"," "].indexOf(e.code) > -1) e.preventDefault();
-    if (!isPlaying) return;
-    switch(e.key) { case 'ArrowUp': frog.move(-1); break; case 'ArrowDown': frog.move(1); break; }
+// ═══════════════════════════════════════════════════════════
+// INPUT
+// ═══════════════════════════════════════════════════════════
+const btnUp=$('btn-up'), btnDown=$('btn-down');
+const doUp=(e)=>{e.preventDefault();if(isPlaying)frog.move(-1);};
+const doDown=(e)=>{e.preventDefault();if(isPlaying)frog.move(1);};
+btnUp.addEventListener('touchstart',doUp,{passive:false}); btnUp.addEventListener('mousedown',doUp);
+btnDown.addEventListener('touchstart',doDown,{passive:false}); btnDown.addEventListener('mousedown',doDown);
+btnUp.addEventListener('touchend',()=>btnUp.classList.remove('pressed'));
+btnDown.addEventListener('touchend',()=>btnDown.classList.remove('pressed'));
+window.addEventListener('keydown',e=>{
+  if(['ArrowUp','ArrowDown',' '].includes(e.code)) e.preventDefault();
+  // Any key to retry after game over
+  if(gameOverShown && !isPlaying && !overlay.classList.contains('hidden')){
+    startGame(); return;
+  }
+  if(!isPlaying) return;
+  if(e.code==='ArrowUp'){btnUp.classList.add('pressed');frog.move(-1);}
+  if(e.code==='ArrowDown'){btnDown.classList.add('pressed');frog.move(1);}
+});
+window.addEventListener('keyup',()=>{btnUp.classList.remove('pressed');btnDown.classList.remove('pressed');});
+startBtn.addEventListener('click',startGame);
+// Tap anywhere on overlay to retry (game over state)
+overlay.addEventListener('click', e => {
+  if(gameOverShown && !isPlaying && e.target !== startBtn) startGame();
 });
 
-const btnUp = document.getElementById('btn-up');
-const btnDown = document.getElementById('btn-down');
-const handleJumpUp = (e) => { e.preventDefault(); frog.move(-1); };
-const handleJumpDown = (e) => { e.preventDefault(); frog.move(1); };
+// Generate polka dots decoration
+(function initDots(){
+  const c=$('overlay-dots');
+  const colors=['#2ec96b','#ffc82e','#ff7eb3','#5bc0f8','#ff5a70','#a78bfa'];
+  for(let i=0;i<14;i++){
+    const s=document.createElement('span');
+    const sz=8+Math.random()*18;
+    s.style.cssText=`width:${sz}px;height:${sz}px;background:${colors[i%colors.length]};
+      left:${Math.random()*95}%;top:${Math.random()*95}%;
+      animation-delay:${-Math.random()*3}s;animation-duration:${3+Math.random()*2}s`;
+    c.appendChild(s);
+  }
+})();
 
-btnUp.addEventListener('touchstart', handleJumpUp, {passive: false});
-btnUp.addEventListener('mousedown', handleJumpUp);
-btnDown.addEventListener('touchstart', handleJumpDown, {passive: false});
-btnDown.addEventListener('mousedown', handleJumpDown);
-
-startBtn.addEventListener('click', startGame);
-drawBackground();
-
+// Initial render
+setupCanvas();
+ctx.clearRect(0,0,LW,LH);
+drawBG();
 </script>
 </body>
 </html>
